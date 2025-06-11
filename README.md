@@ -1,6 +1,6 @@
 # SmartClause
 
-Smart Clause is an AI-powered legal document analysis platformfocused on Russian legal market and legislation with a comprehensive chat-based document management system. The platform leverages RAG (Retrieval-Augmented Generation) technology with legal vector databases to provide intelligent document analysis and interactive consultation capabilities.
+Smart Clause is an AI-powered legal document analysis platform-focused on Russian legal market and legislation with a comprehensive chat-based document management system. The platform leverages RAG (Retrieval-Augmented Generation) technology with legal vector databases to provide intelligent document analysis and interactive consultation capabilities.
 
 ## Boilerplate Structure
 
