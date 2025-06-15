@@ -6,6 +6,29 @@ services:
     volumes:
       - ./backend:/app
 
+  analyzer:
+    build: ./analyzer
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./analyzer:/app
+    environment:
+      - DATABASE_URL=postgresql://smartclause:smartclause@postgres:5432/smartclause_analyzer
+    depends_on:
+      - postgres
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_DB=smartclause_analyzer
+      - POSTGRES_USER=smartclause
+      - POSTGRES_PASSWORD=smartclause
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./analyzer/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+
   frontend:
     build: ./frontend
     command: npm run serve
@@ -15,4 +38,8 @@ services:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - backend 
+      - backend
+      - analyzer
+
+volumes:
+  postgres_data: 
