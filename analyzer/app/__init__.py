@@ -1,0 +1,1 @@
+# SmartClause Analyzer Application 
