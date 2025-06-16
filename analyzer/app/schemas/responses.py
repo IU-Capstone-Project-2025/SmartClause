@@ -8,11 +8,32 @@ class TextEmbeddingPair(BaseModel):
     embedding: List[float] = Field(..., description="Vector embedding of the text")
 
 
+class DocumentMetadata(BaseModel):
+    """Metadata for legal rule documents"""
+    file_name: Optional[str] = Field(None, description="Source file name")
+    rule_number: Optional[int] = Field(None, description="Article/rule number")
+    rule_title: Optional[str] = Field(None, description="Article title")
+    section_title: Optional[str] = Field(None, description="Section title")
+    chapter_title: Optional[str] = Field(None, description="Chapter title")
+    start_char: Optional[int] = Field(None, description="Start character position")
+    end_char: Optional[int] = Field(None, description="End character position")
+    text_length: Optional[int] = Field(None, description="Text length in characters")
+
+
+class RetrieveResult(BaseModel):
+    """Enhanced response item for /retrieve endpoint with metadata"""
+    text: str = Field(..., description="Retrieved text chunk")
+    embedding: List[float] = Field(..., description="Vector embedding of the text")
+    metadata: DocumentMetadata = Field(..., description="Document metadata")
+    similarity_score: float = Field(..., description="Similarity score (distance-based)")
+
+
 class RetrieveResponse(BaseModel):
     """Response schema for /retrieve endpoint"""
-    results: List[TextEmbeddingPair] = Field(..., description="List of text/embedding pairs")
+    results: List[RetrieveResult] = Field(..., description="List of text/embedding pairs with metadata")
     total_results: int = Field(..., description="Total number of results found")
     query: str = Field(..., description="Original query")
+    distance_function: str = Field(..., description="Distance function used for similarity")
 
 
 class AnalysisPoint(BaseModel):

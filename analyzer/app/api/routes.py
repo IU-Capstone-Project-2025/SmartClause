@@ -8,6 +8,7 @@ from ..schemas.requests import RetrieveRequest, AnalyzeRequest, EmbedRequest
 from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse, EmbedResponse
 from ..services.rag_service import rag_service
 from ..services.embedding_service import embedding_service
+from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -40,13 +41,14 @@ async def retrieve_documents(
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve relevant documents based on query using RAG
+    Retrieve relevant documents based on query using distance-based similarity
     
-    This endpoint will perform semantic search over the legal document corpus
-    and return the k most relevant text chunks with their embeddings.
+    This endpoint performs semantic search over the legal document corpus
+    and returns the k most relevant text chunks with their embeddings and metadata.
+    Supports configurable distance functions: cosine, l2, inner_product.
     """
     try:
-        logger.info(f"Retrieve request: query='{request.query[:50]}...', k={request.k}")
+        logger.info(f"Retrieve request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
         
         # Validate k parameter
         if request.k > settings.max_k:
@@ -55,9 +57,19 @@ async def retrieve_documents(
                 detail=f"k cannot exceed {settings.max_k}"
             )
         
-        response = await rag_service.retrieve_documents(request, db)
+        # Convert string distance function to enum
+        distance_func = DistanceFunction(request.distance_function)
+        
+        # Use the new retrieval service with distance-based similarity
+        response = await retrieval_service.retrieve_documents(request, db, distance_func)
         return response
         
+    except ValueError as e:
+        # Handle invalid distance function
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid distance function: {str(e)}"
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -116,6 +128,7 @@ async def retrieve_documents_json(
 ):
     """
     Alternative JSON endpoint for retrieve (for easier testing)
+    Same functionality as /retrieve but explicitly named for JSON requests
     """
     return await retrieve_documents(request, db)
 
