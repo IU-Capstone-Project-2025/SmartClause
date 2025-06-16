@@ -33,4 +33,11 @@ class HealthResponse(BaseModel):
     """Response schema for health check"""
     status: str = Field(..., description="Service status")
     version: str = Field(..., description="API version")
-    database_connected: bool = Field(..., description="Database connection status") 
+    database_connected: bool = Field(..., description="Database connection status")
+
+
+class EmbedResponse(BaseModel):
+    """Response schema for /embed endpoint"""
+    text: str = Field(..., description="Original input text")
+    embedding: List[float] = Field(..., description="Vector embedding of the text")
+    dimension: int = Field(..., description="Dimension of the embedding vector") 

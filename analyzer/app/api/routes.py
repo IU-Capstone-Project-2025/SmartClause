@@ -4,9 +4,10 @@ from sqlalchemy import text
 from typing import List
 import logging
 from ..core.database import get_db, engine
-from ..schemas.requests import RetrieveRequest, AnalyzeRequest
-from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse
+from ..schemas.requests import RetrieveRequest, AnalyzeRequest, EmbedRequest
+from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse, EmbedResponse
 from ..services.rag_service import rag_service
+from ..services.embedding_service import embedding_service
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -116,4 +117,35 @@ async def retrieve_documents_json(
     """
     Alternative JSON endpoint for retrieve (for easier testing)
     """
-    return await retrieve_documents(request, db) 
+    return await retrieve_documents(request, db)
+
+
+@router.post("/embed", response_model=EmbedResponse)
+async def embed_text(request: EmbedRequest):
+    """
+    Generate embeddings for input text
+    
+    This endpoint accepts text input and returns the corresponding
+    vector embedding using the configured sentence transformer model.
+    """
+    try:
+        logger.info(f"Embed request: text='{request.text[:50]}...'")
+        
+        # Generate embedding using the embedding service
+        embedding = embedding_service.encode_to_list(request.text)
+        
+        # Get dimension of the embedding
+        dimension = len(embedding)
+        
+        return EmbedResponse(
+            text=request.text,
+            embedding=embedding,
+            dimension=dimension
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in embed_text: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during embedding generation"
+        ) 

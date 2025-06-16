@@ -27,4 +27,15 @@ class AnalyzeRequest(BaseModel):
     
     class Config:
         # Allow bytes field to be serialized
-        arbitrary_types_allowed = True 
+        arbitrary_types_allowed = True
+
+
+class EmbedRequest(BaseModel):
+    """Request schema for /embed endpoint"""
+    text: str = Field(..., description="Text to generate embeddings for", min_length=1)
+    
+    @validator('text')
+    def validate_text(cls, v):
+        if not v.strip():
+            raise ValueError('Text cannot be empty or whitespace only')
+        return v.strip() 
