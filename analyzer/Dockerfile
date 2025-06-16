@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install the embedding model
+COPY scripts/init_model.py .
+RUN python init_model.py
+
 # Copy application code
 COPY . .
 
