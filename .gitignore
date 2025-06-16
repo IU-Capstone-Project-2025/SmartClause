@@ -66,6 +66,13 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# Spring stuff:
+HELP.md
+target/
+!**/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
 # Scrapy stuff:
 .scrapy
 
