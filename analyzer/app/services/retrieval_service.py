@@ -124,11 +124,11 @@ class RetrievalService:
     def _build_distance_query(self, distance_function: DistanceFunction, query_vector: str) -> str:
         """Build the distance query based on the selected function"""
         if distance_function == DistanceFunction.COSINE:
-            return f"(embedding <=> '{query_vector}')"
+            return f"(1 - (embedding <=> '{query_vector}'))"
         elif distance_function == DistanceFunction.L2:
-            return f"(embedding <-> '{query_vector}')"
+            return f"(1 - (embedding <-> '{query_vector}'))"
         elif distance_function == DistanceFunction.INNER_PRODUCT:
-            return f"(embedding <#> '{query_vector}')"
+            return f"(1 - (embedding <#> '{query_vector}'))"
         else:
             raise ValueError(f"Unsupported distance function: {distance_function}")
     
