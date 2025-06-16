@@ -117,13 +117,40 @@ analyzer/
 └── tests/            # Test suite
 ```
 
+## Dataset & Embeddings Management
+
+The analyzer includes scripts to process the Civil Code dataset from the `parser` module and create embeddings for RAG functionality:
+
+### Quick Start with Embeddings
+
+```bash
+# 1. Generate embeddings from dataset (first time only)
+python scripts/manage_embeddings.py generate
+
+# 2. Upload to PostgreSQL database
+python scripts/manage_embeddings.py upload --clear-existing
+
+# 3. Or run everything in one command
+python scripts/manage_embeddings.py full --clear-existing
+```
+
+### Available Scripts
+
+- **`scripts/generate_embeddings.py`** - Creates embeddings from legal rules dataset
+- **`scripts/upload_embeddings.py`** - Uploads embeddings to PostgreSQL
+- **`scripts/manage_embeddings.py`** - Convenient wrapper for all operations
+
+See [`scripts/README.md`](scripts/README.md) for detailed documentation.
+
 ## Current Implementation Status
 
 - ✅ Database schema with pgvector
 - ✅ FastAPI application structure
 - ✅ Mock API endpoints
 - ✅ Embedding service setup
-- 🔄 RAG implementation (mock data)
+- ✅ **Dataset processing and embedding generation**
+- ✅ **Vector database population scripts**
+- 🔄 RAG implementation (transitioning from mock to real data)
 - 🔄 LLM integration for analysis
 - 🔄 Document processing pipeline
 
