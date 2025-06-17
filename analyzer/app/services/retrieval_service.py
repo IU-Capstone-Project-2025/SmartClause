@@ -126,9 +126,9 @@ class RetrievalService:
         if distance_function == DistanceFunction.COSINE:
             return f"(1 - (embedding <=> '{query_vector}'))"
         elif distance_function == DistanceFunction.L2:
-            return f"(1 - (embedding <-> '{query_vector}'))"
+            return f"(embedding <-> '{query_vector}')"
         elif distance_function == DistanceFunction.INNER_PRODUCT:
-            return f"(1 - (embedding <#> '{query_vector}'))"
+            return f"((embedding <#> '{query_vector}') * -1)"
         else:
             raise ValueError(f"Unsupported distance function: {distance_function}")
     

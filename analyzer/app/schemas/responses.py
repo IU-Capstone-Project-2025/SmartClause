@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 class TextEmbeddingPair(BaseModel):
@@ -43,11 +43,24 @@ class AnalysisPoint(BaseModel):
     recommendation: str = Field(..., description="Recommended action or solution")
 
 
+class DocumentPointAnalysis(BaseModel):
+    """Analysis result for a single document point/clause"""
+    point_number: Optional[str] = Field(None, description="Point number (e.g., '1.', 'Article 5')")
+    point_content: str = Field(..., description="Original content of the document point")
+    point_type: str = Field(..., description="Type of point (numbered_clause, bullet_point, paragraph)")
+    analysis_points: List[AnalysisPoint] = Field(..., description="Analysis results for this point")
+
+
 class AnalyzeResponse(BaseModel):
     """Response schema for /analyze endpoint"""
-    points: List[AnalysisPoint] = Field(..., description="List of analysis points")
+    document_points: List[DocumentPointAnalysis] = Field(..., description="Analysis results for each document point")
     document_id: str = Field(..., description="Document identifier")
+    document_metadata: Dict[str, Any] = Field(..., description="Document metadata (length, word count, etc.)")
+    total_points: int = Field(..., description="Total number of points analyzed")
     analysis_timestamp: str = Field(..., description="Timestamp of analysis")
+    
+    # For backward compatibility
+    points: List[AnalysisPoint] = Field(default_factory=list, description="Deprecated: use document_points instead")
 
 
 class HealthResponse(BaseModel):
