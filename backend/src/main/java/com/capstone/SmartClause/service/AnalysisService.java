@@ -19,7 +19,7 @@ public class AnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalysisService.class);
 
-    @Value("${analyzer.api.url:http://localhost:8001/api/v1}")
+    @Value("${analyzer.api.baseUrl}")
     private String analyzerApiUrl;
 
     @Autowired
