@@ -4,23 +4,25 @@ import com.capstone.SmartClause.model.AnalysisResponse;
 import com.capstone.SmartClause.service.AnalysisService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.web.bind.annotation.RequestMethod;
+
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
-@EnableAsync
+@CrossOrigin(origins = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE}, maxAge = 3600)
 public class Controller {
     
     @Autowired
     private AnalysisService analysisService;
 
-    @PostMapping("/upload")
+    @PostMapping("/get_analysis")
     public ResponseEntity<?> uploadDocumentFile(
             @RequestParam("id") String id,
             @RequestParam("bytes") MultipartFile file) {
