@@ -23,6 +23,9 @@ numpy>=1.24.3
 # LangChain for text splitting
 langchain>=0.1.0
 
+# LLM integration
+openai>=1.0.0
+
 # Environment configuration (used in scripts)
 python-dotenv>=1.0.0
 

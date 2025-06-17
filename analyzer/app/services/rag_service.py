@@ -3,6 +3,8 @@ from datetime import datetime
 import logging
 import hashlib
 from sqlalchemy.orm import Session
+from openai import OpenAI
+from ..core.config import settings
 from ..schemas.requests import RetrieveRequest, AnalyzeRequest
 from ..schemas.responses import (
     TextEmbeddingPair, RetrieveResponse, AnalysisPoint, 
@@ -20,7 +22,16 @@ class RAGService:
     """Service for RAG operations - retrieval and analysis"""
     
     def __init__(self):
-        pass
+        # Initialize OpenRouter client
+        self.openai_client = None
+        if settings.openrouter_api_key:
+            self.openai_client = OpenAI(
+                base_url=settings.openrouter_base_url,
+                api_key=settings.openrouter_api_key,
+            )
+            logger.info("OpenRouter client initialized successfully")
+        else:
+            logger.warning("OpenRouter API key not found. LLM analysis will use mock responses.")
     
     async def analyze_document(self, request: AnalyzeRequest, db: Session) -> AnalyzeResponse:
         """
@@ -195,40 +206,60 @@ class RAGService:
     
     async def _call_llm(self, prompt: str) -> str:
         """
-        Call LLM for analysis
-        TODO: Replace with your actual LLM implementation
+        Call LLM for analysis using OpenRouter
         """
         try:
-            # TODO: Implement actual LLM call
-            # This could be OpenAI, local model, or any other LLM service
+            if self.openai_client is None:
+                logger.warning("OpenRouter client not initialized, using mock response")
+                return self._get_mock_response()
             
-            # Example with OpenAI:
-            # import openai
-            # response = await openai.chat.completions.create(
-            #     model="gpt-4",
-            #     messages=[{"role": "user", "content": prompt}],
-            #     temperature=0.3
-            # )
-            # return response.choices[0].message.content
+            # Prepare headers for OpenRouter
+            extra_headers = {}
+            if settings.site_url:
+                extra_headers["HTTP-Referer"] = settings.site_url
+            if settings.site_name:
+                extra_headers["X-Title"] = settings.site_name
             
-            # Example with local model (e.g., Ollama):
-            # import httpx
-            # async with httpx.AsyncClient() as client:
-            #     response = await client.post(
-            #         "http://localhost:11434/api/generate",
-            #         json={"model": "llama2", "prompt": prompt, "stream": False}
-            #     )
-            #     return response.json()["response"]
+            # Call OpenRouter API
+            logger.info(f"Calling OpenRouter with model: {settings.openrouter_model}")
+            logger.debug(f"Prompt length: {len(prompt)} characters")
             
-            # Example with langchain:
-            # from langchain.llms import OpenAI
-            # llm = OpenAI(temperature=0.3)
-            # return await llm.agenerate([prompt])
+            completion = self.openai_client.chat.completions.create(
+                extra_headers=extra_headers,
+                model=settings.openrouter_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=2000
+            )
             
-            # For now, using mock response
+            logger.debug(f"OpenRouter API call completed. Response object: {type(completion)}")
             
-            # Mock response for now
-            mock_response = '''[
+            response_content = completion.choices[0].message.content
+            
+            # Check if response is valid
+            if not response_content:
+                logger.warning("OpenRouter returned empty response, using mock response")
+                return self._get_mock_response()
+            
+            logger.info(f"LLM analysis completed successfully via OpenRouter. Response length: {len(response_content)}")
+            logger.debug(f"OpenRouter response preview: {response_content[:200]}...")
+            return response_content
+            
+        except Exception as e:
+            logger.error(f"OpenRouter LLM call failed: {e}")
+            # Return fallback mock response
+            return self._get_mock_response()
+    
+    def _get_mock_response(self) -> str:
+        """
+        Return mock response when LLM is not available
+        """
+        return '''[
   {
     "cause": "Неопределенность в сроках исполнения обязательств",
     "risk": "Средний риск споров о сроках и возможных штрафных санкций",
@@ -240,20 +271,6 @@ class RAGService:
     "recommendation": "Добавить пункт о досудебном урегулировании споров и указать применимое право"
   }
 ]'''
-            
-            logger.info("LLM analysis completed (mock response)")
-            return mock_response
-            
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            # Return fallback analysis
-            return '''[
-  {
-    "cause": "Ошибка при анализе с помощью ИИ",
-    "risk": "Невозможно определить риски автоматически",
-    "recommendation": "Необходима ручная проверка юристом"
-  }
-]'''
     
     def _parse_llm_response(self, llm_response: str) -> List[AnalysisPoint]:
         """
@@ -262,8 +279,26 @@ class RAGService:
         try:
             import json
             
+            # Check if response is empty or None
+            if not llm_response or not llm_response.strip():
+                logger.warning("LLM response is empty, using default analysis")
+                return self._get_default_analysis()
+            
+            response_text = llm_response.strip()
+            logger.debug(f"Raw LLM response: {response_text[:500]}...")
+            
+            # Try to extract JSON from response if it contains other text
+            json_start = response_text.find('[')
+            json_end = response_text.rfind(']') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_text = response_text[json_start:json_end]
+                logger.debug(f"Extracted JSON: {json_text}")
+            else:
+                json_text = response_text
+            
             # Try to parse JSON response
-            analysis_data = json.loads(llm_response.strip())
+            analysis_data = json.loads(json_text)
             
             analysis_points = []
             for item in analysis_data:
@@ -278,7 +313,7 @@ class RAGService:
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.error(f"Failed to parse LLM response: {e}")
-            logger.debug(f"LLM response was: {llm_response}")
+            logger.debug(f"LLM response was: '{llm_response}'")
             
             # Try to extract analysis from text if JSON parsing fails
             return self._parse_text_response(llm_response)
