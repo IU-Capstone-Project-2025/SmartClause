@@ -15,6 +15,38 @@ The platform consists of multiple microservices:
 - Docker
 - Docker Compose
 
+## Environment Setup
+
+Before running the application, you need to configure environment variables for the analyzer microservice:
+
+1. **Copy the environment template**:
+   ```bash
+   cp analyzer/env.example analyzer/.env
+   ```
+
+2. **Configure required environment variables** in `analyzer/.env`:
+   
+   **Required Configuration:**
+   - `OPENROUTER_API_KEY`: Your OpenRouter API key for LLM integration
+   
+   **Database Configuration (pre-configured for Docker):**
+   - `POSTGRES_DB=smartclause_analyzer`
+   - `POSTGRES_USER=smartclause` 
+   - `POSTGRES_PASSWORD=smartclause`
+   - `DATABASE_URL=postgresql://smartclause:smartclause@postgres:5432/smartclause_analyzer`
+
+   **Optional Configuration:**
+   - `OPENROUTER_MODEL`: LLM model to use (default: `openai/gpt-4o`)
+   - `EMBEDDING_MODEL`: Embedding model (default: `BAAI/bge-m3`)
+   - `MAX_FILE_SIZE`: File upload size limit in bytes
+   - `DEFAULT_K`: Default number of documents to retrieve in RAG
+   - `MAX_K`: Maximum number of documents to retrieve
+
+3. **Get your OpenRouter API key**:
+   - Sign up at [OpenRouter](https://openrouter.ai/)
+   - Generate an API key
+   - Add it to your `analyzer/.env` file
+
 ## How to run
 
 1.  Clone the repository.
