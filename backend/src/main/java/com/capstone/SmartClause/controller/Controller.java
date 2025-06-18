@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.GetMapping;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,5 +51,19 @@ public class Controller {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to process file: " + e.getMessage()));
         }
+    }
+    
+    @Operation(summary = "Check service health", description = "Returns the health status of the service")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Service is healthy",
+                content = @Content(mediaType = "application/json"))
+    })
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> healthCheck() {
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "service", "SmartClause API",
+            "timestamp", java.time.Instant.now().toString()
+        ));
     }
 }
