@@ -1,12 +1,21 @@
-# syntax=docker/dockerfile:1
-
-FROM python:3.9-slim
+FROM maven:3.9-amazoncorretto-21 AS build
 
 WORKDIR /app
 
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN yum install -y curl && yum clean all
 
-COPY . .
+COPY pom.xml .
+COPY src src
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+RUN mvn dependency:go-offline -B
+RUN mvn package -DskipTests
+
+FROM amazoncorretto:21-alpine
+
+WORKDIR /app
+
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8000
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
