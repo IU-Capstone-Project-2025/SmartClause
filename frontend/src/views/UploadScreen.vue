@@ -53,14 +53,25 @@ export default {
     handleFileSelect(event) {
       const file = event.target.files[0];
       if (file) {
-        this.$router.push({ name: 'Processing', query: { fileName: file.name } });
+        this.processFile(file);
       }
     },
     handleFileDrop(event) {
       const file = event.dataTransfer.files[0];
       if (file) {
-        this.$router.push({ name: 'Processing', query: { fileName: file.name } });
+        this.processFile(file);
       }
+    },
+    processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        // eslint-disable-next-line
+        const base64String = e.target.result.split(',')[1];
+        sessionStorage.setItem('fileToUpload', base64String);
+        sessionStorage.setItem('fileName', file.name);
+        this.$router.push({ name: 'Processing' });
+      };
+      reader.readAsDataURL(file);
     }
   }
 }

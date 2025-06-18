@@ -34,14 +34,29 @@ export default {
     return {
       activeIndex: null,
       fileName: '',
-      results: [
-        { title: 'Clause 1.1: The address of the apartment (subject of the contract) is not specified.', details: 'The contract does not specify the exact address of the apartment for rent, which could lead to legal disputes.' },
-        { title: 'Clause 2.1: An inventory of property is mentioned, but it is missing.', details: 'The contract refers to an appendix with a property inventory, but the appendix itself is not attached to the document.' },
-      ]
+      results: []
     };
   },
   created() {
     this.fileName = this.$route.query.fileName || 'Unknown file';
+    const resultsData = sessionStorage.getItem('analysisResults');
+    if (resultsData) {
+      const apiResponse = JSON.parse(resultsData);
+      if (apiResponse.document_points) {
+        this.results = apiResponse.document_points.map(point => {
+          const details = point.analysis_points.map(analysis => {
+            return `Risk: ${analysis.risk}\nCause: ${analysis.cause}\nRecommendation: ${analysis.recommendation}`;
+          }).join('\\n\\n');
+
+          return {
+            title: point.point_content,
+            details: details
+          };
+        });
+      }
+    } else {
+      this.$router.push('/');
+    }
   },
   methods: {
     toggleResult(index) {
@@ -134,5 +149,9 @@ export default {
     border-top: 1px solid #1e293b;
     margin-top: 15px;
     padding-top: 20px;
+}
+
+.result-content p {
+  white-space: pre-wrap;
 }
 </style> 

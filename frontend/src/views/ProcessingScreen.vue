@@ -6,20 +6,20 @@
         <span class="file-name">{{ fileName }}</span>
         <div class="status">
           <span class="status-dot"></span>
-          <span>Issues found: 0</span>
+          <span>Issues found: ...</span>
         </div>
       </div>
     </div>
 
     <div class="processing-container">
       <div class="processing-content">
-        <p class="status-text">Processing data... Please wait.</p>
+        <p class="status-text">{{ statusText }}</p>
         <div class="progress-wrapper">
             <p class="progress-label">Analyzing document and preparing recommendations</p>
             <div class="progress-bar-container">
-                <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+                <div class="progress-bar" style="width: 100%"></div>
             </div>
-            <p class="time-remaining">This will take about {{ formattedTime }}</p>
+            <p class="time-remaining">This may take a few moments</p>
         </div>
         <button class="cancel-button" @click="cancel">Cancel</button>
       </div>
@@ -28,45 +28,50 @@
 </template>
 
 <script>
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+
 export default {
   name: 'ProcessingScreen',
   data() {
     return {
-      progress: 0,
-      totalTime: 5, // 4 minutes and 29 seconds
-      elapsedTime: 0,
-      interval: null,
-      fileName: ''
+      fileName: '',
+      statusText: 'Processing data... Please wait.'
     };
   },
-  computed: {
-    formattedTime() {
-      const remainingTime = this.totalTime - this.elapsedTime;
-      const minutes = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-      const seconds = (remainingTime % 60).toString().padStart(2, '0');
-      return `${minutes}:${seconds}`;
-    }
-  },
   created() {
-    this.fileName = this.$route.query.fileName || 'Unknown file';
+    this.fileName = sessionStorage.getItem('fileName') || 'Unknown file';
   },
   mounted() {
-    this.startProgress();
-  },
-  beforeUnmount() {
-    clearInterval(this.interval);
+    this.uploadAndProcessFile();
   },
   methods: {
-    startProgress() {
-      this.interval = setInterval(() => {
-        if (this.progress < 100) {
-          this.progress += 1;
-          this.elapsedTime = Math.floor((this.totalTime * this.progress) / 100);
-        } else {
-          clearInterval(this.interval);
+    uploadAndProcessFile() {
+      const fileData = sessionStorage.getItem('fileToUpload');
+      if (!fileData) {
+        this.$router.push('/');
+        return;
+      }
+
+      this.statusText = 'Uploading and analyzing your document...';
+
+      const payload = {
+        id: uuidv4(),
+        bytes: fileData
+      };
+
+      axios.post('/api/upload', payload)
+        .then(response => {
+          this.statusText = 'Analysis complete. Loading results...';
+          sessionStorage.setItem('analysisResults', JSON.stringify(response.data));
           this.$router.push({ name: 'Results', query: { fileName: this.fileName } });
-        }
-      }, (this.totalTime * 1000) / 100);
+        })
+        .catch(error => {
+          console.error('Processing failed:', error);
+          this.statusText = 'An error occurred during processing. Please try again.';
+          // Optionally, redirect back to upload screen after a delay
+          setTimeout(() => this.$router.push('/'), 2000);
+        });
     },
     cancel() {
       this.$router.push('/');
@@ -160,7 +165,20 @@ export default {
   background-color: #2563eb;
   height: 100%;
   border-radius: 10px;
-  transition: width 0.1s linear;
+  /* Make it an indeterminate progress bar */
+  animation: indeterminate 2s infinite linear;
+}
+
+@keyframes indeterminate {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
 }
 
 .time-remaining {
