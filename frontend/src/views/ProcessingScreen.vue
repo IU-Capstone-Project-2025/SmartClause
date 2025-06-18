@@ -1,0 +1,204 @@
+<template>
+  <div class="processing-screen">
+    <div class="results-header">
+      <h2>Analysis Results</h2>
+      <div class="file-info-bar">
+        <span class="file-name">{{ fileName }}</span>
+        <div class="status">
+          <span class="status-dot"></span>
+          <span>Issues found: ...</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="processing-container">
+      <div class="processing-content">
+        <p class="status-text">{{ statusText }}</p>
+        <div class="progress-wrapper">
+            <p class="progress-label">Analyzing document and preparing recommendations</p>
+            <div class="progress-bar-container">
+                <div class="progress-bar" style="width: 100%"></div>
+            </div>
+            <p class="time-remaining">This may take a few moments</p>
+        </div>
+        <button class="cancel-button" @click="cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+
+export default {
+  name: 'ProcessingScreen',
+  data() {
+    return {
+      fileName: '',
+      statusText: 'Processing data... Please wait.'
+    };
+  },
+  created() {
+    this.fileName = sessionStorage.getItem('fileName') || 'Unknown file';
+  },
+  mounted() {
+    this.uploadAndProcessFile();
+  },
+  methods: {
+    uploadAndProcessFile() {
+      const fileData = sessionStorage.getItem('fileToUpload');
+      if (!fileData) {
+        this.$router.push('/');
+        return;
+      }
+
+      this.statusText = 'Uploading and analyzing your document...';
+
+      const payload = {
+        id: uuidv4(),
+        bytes: fileData
+      };
+
+      axios.post('/api/upload', payload)
+        .then(response => {
+          this.statusText = 'Analysis complete. Loading results...';
+          sessionStorage.setItem('analysisResults', JSON.stringify(response.data));
+          this.$router.push({ name: 'Results', query: { fileName: this.fileName } });
+        })
+        .catch(error => {
+          console.error('Processing failed:', error);
+          this.statusText = 'An error occurred during processing. Please try again.';
+          // Optionally, redirect back to upload screen after a delay
+          setTimeout(() => this.$router.push('/'), 2000);
+        });
+    },
+    cancel() {
+      this.$router.push('/');
+    }
+  }
+}
+</script>
+
+<style scoped>
+.processing-screen {
+  padding: 60px;
+  background-color: #0c1a2e;
+  color: #ffffff;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+}
+
+.results-header h2 {
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 30px;
+}
+
+.file-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #1e293b;
+    padding: 15px 25px;
+    border-radius: 15px;
+    margin-bottom: 40px;
+}
+
+.file-name {
+    font-weight: 500;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #e53e3e;
+    border-radius: 50%;
+}
+
+.processing-container {
+  background-color: #162235;
+  border-radius: 20px;
+  padding: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.processing-content {
+    width: 600px;
+}
+
+.status-text {
+  color: #a0aec0;
+  margin-bottom: 40px;
+  font-style: italic;
+}
+
+.progress-wrapper {
+  background-color: #0c1a2e;
+  border-radius: 15px;
+  padding: 30px;
+}
+
+.progress-label {
+    margin-bottom: 15px;
+    font-weight: 500;
+}
+
+.progress-bar-container {
+  background-color: #1e293b;
+  border-radius: 10px;
+  height: 20px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.progress-bar {
+  background-color: #2563eb;
+  height: 100%;
+  border-radius: 10px;
+  /* Make it an indeterminate progress bar */
+  animation: indeterminate 2s infinite linear;
+}
+
+@keyframes indeterminate {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+.time-remaining {
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+.cancel-button {
+  background-color: transparent;
+  color: #a0aec0;
+  border: 1px solid #3a4b68;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+  margin-top: 40px;
+}
+
+.cancel-button:hover {
+  background-color: #1e293b;
+  color: #ffffff;
+}
+</style> 
