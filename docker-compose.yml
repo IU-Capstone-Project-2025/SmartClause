@@ -3,6 +3,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
     environment:
       - POSTGRES_DB=jdbc:postgresql://postgres:5432/smartclause_analyzer
       - POSTGRES_USER=smartclause
