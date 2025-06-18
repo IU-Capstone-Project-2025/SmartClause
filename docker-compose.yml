@@ -4,7 +4,15 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
+    environment:
+      - POSTGRES_DB=jdbc:postgresql://postgres:5432/smartclause_analyzer
+      - POSTGRES_USER=smartclause
+      - POSTGRES_PASSWORD=smartclause
+      - ANALYZER_API_BASEURL=http://analyzer:8001/api/v1
+    depends_on:
+      - postgres
+      - analyzer
 
   analyzer:
     build: ./analyzer
