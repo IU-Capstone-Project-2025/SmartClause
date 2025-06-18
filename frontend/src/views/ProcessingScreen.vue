@@ -55,12 +55,25 @@ export default {
 
       this.statusText = 'Uploading and analyzing your document...';
 
-      const payload = {
-        id: uuidv4(),
-        bytes: fileData
-      };
+      // Convert base64 string back to file for multipart upload
+      const byteCharacters = atob(fileData);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const file = new Blob([byteArray], { type: 'application/octet-stream' });
 
-      axios.post('/api/upload', payload)
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('id', uuidv4());
+      formData.append('bytes', file, this.fileName);
+
+      axios.post('/api/v1/get_analysis', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
         .then(response => {
           this.statusText = 'Analysis complete. Loading results...';
           sessionStorage.setItem('analysisResults', JSON.stringify(response.data));
