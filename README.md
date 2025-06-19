@@ -62,9 +62,9 @@ docker-compose up --build -d
 ```
 
 ### 4. Setup Vector Database
+After the services are running, set up the vector database. This script uploads the pre-computed legal article embeddings to PostgreSQL.
 ```bash
-cd analyzer
-python scripts/manage_embeddings.py upload --clear-existing
+docker-compose exec analyzer python scripts/manage_embeddings.py upload --clear-existing
 ```
 
 ### 5. Access the Application
@@ -142,25 +142,21 @@ The `analyzer/.env` file contains the following configuration options:
 - `MAX_K`: Maximum number of documents to retrieve (default: 20)
 
 ### Vector Database Management
+Use `docker-compose exec` to run management commands inside the `analyzer` container.
 ```bash
-cd analyzer
-
-# Check database status
-python scripts/manage_embeddings.py status
-
 # Generate embeddings from scratch (if needed)
-python scripts/manage_embeddings.py generate
+docker-compose exec analyzer python scripts/manage_embeddings.py generate
 
 # Upload embeddings to database
-python scripts/manage_embeddings.py upload --clear-existing
+docker-compose exec analyzer python scripts/manage_embeddings.py upload --clear-existing
 
 # Full setup (generate + upload)
-python scripts/manage_embeddings.py full --clear-existing
+docker-compose exec analyzer python scripts/manage_embeddings.py full --clear-existing
 ```
 
-**Note for Apple Silicon users**: If you encounter memory issues, use:
+**Note for Apple Silicon users**: If you encounter memory issues while generating embeddings, use the `--force-cpu` flag:
 ```bash
-python scripts/manage_embeddings.py generate --force-cpu
+docker-compose exec analyzer python scripts/manage_embeddings.py generate --force-cpu
 ```
 
 ## 📚 API Documentation
