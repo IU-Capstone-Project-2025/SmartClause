@@ -32,7 +32,7 @@ def load_environment():
 def get_database_config():
     """Get database configuration from environment variables."""
     config = {
-        'host': os.getenv('POSTGRES_HOST', 'localhost'),
+        'host': os.getenv('POSTGRES_HOST', 'postgres'),
         'port': int(os.getenv('POSTGRES_PORT', 5432)),
         'database': os.getenv('POSTGRES_DB', 'smartclause_analyzer'),
         'user': os.getenv('POSTGRES_USER', 'smartclause'),
