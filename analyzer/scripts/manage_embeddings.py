@@ -71,7 +71,7 @@ def check_files():
     project_root = analyzer_dir.parent
     
     # Check source dataset
-    source_csv = project_root / "parser" / "dataset" / "dataset_gk_rf.csv"
+    source_csv = project_root / "parser" / "dataset" / "dataset_codes_rf.csv"
     embeddings_csv = analyzer_dir / "scripts" / "legal_rules_with_embeddings.csv"
     
     print("\n📁 File Status Check:")
@@ -117,12 +117,36 @@ def show_workflow():
    - Other team members can skip generation and just upload
    - Use --clear-existing to replace existing data
    
-🔧 MEMORY ISSUES (Apple Silicon):
-   - If you get "MPS backend out of memory" error:
-     python scripts/manage_embeddings.py generate --force-cpu
-   - Or use smaller batch size:
-     python scripts/manage_embeddings.py generate --batch-size 4
-   - The script will auto-detect and suggest optimal settings
+🔧 MEMORY OPTIMIZATION (UPDATED - v2.0):
+   
+   🍎 APPLE SILICON (MPS) USERS:
+   The script now uses STREAMING PROCESSING to prevent memory leaks:
+   - Processes data in small chunks instead of loading everything
+   - Aggressively cleans memory between batches
+   - Uses conservative batch sizes (default: 2 for MPS)
+   - Saves progress incrementally to prevent data loss
+   
+   ✅ RECOMMENDED FOR MPS:
+   python scripts/manage_embeddings.py generate --max-rows 10    # Test first
+   python scripts/manage_embeddings.py generate                 # Full run with auto-settings
+   
+   ⚠️  IF YOU STILL GET MEMORY ERRORS:
+   python scripts/manage_embeddings.py generate --force-cpu     # Force CPU (slower but stable)
+   python scripts/manage_embeddings.py generate --batch-size 1  # Ultra-conservative
+   
+   🚀 GPU USERS (CUDA):
+   python scripts/manage_embeddings.py generate --batch-size 16 # Larger batches for CUDA
+   
+   💻 CPU ONLY:
+   python scripts/manage_embeddings.py generate --force-cpu --batch-size 4
+   
+🆕 NEW FEATURES:
+   - Streaming processing eliminates memory accumulation
+   - Progressive saving prevents data loss during interruptions
+   - Better error recovery with individual text fallback
+   - Automatic device detection with conservative defaults
+   - Real-time memory cleanup between batches
+   - Detailed progress reporting with chunk-by-chunk updates
 """)
 
 def main():
