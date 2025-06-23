@@ -6,7 +6,7 @@ import logging
 from ..core.database import get_db, engine
 from ..schemas.requests import RetrieveRequest, AnalyzeRequest, EmbedRequest
 from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse, EmbedResponse
-from ..services.rag_service import rag_service
+from ..services.analyzer_service import analyzer_service
 from ..services.embedding_service import embedding_service
 from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..core.config import settings
@@ -108,7 +108,7 @@ async def analyze_document(
         # Create analyze request
         analyze_request = AnalyzeRequest(id=id, content=file_content)
         
-        response = await rag_service.analyze_document(analyze_request, db)
+        response = await analyzer_service.analyze_document(analyze_request, db)
         return response
         
     except HTTPException:
