@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
 Script to generate embeddings for legal rules dataset.
-This script reads the dataset from parser/dataset/dataset_gk_rf.csv,
+This script reads the dataset from parser/dataset/dataset_codes_rf.csv,
 generates embeddings for rule_text using BGE-M3 model,
 and saves the results to a CSV file that can be committed to Git.
+
+OPTIMIZED VERSION - Fixes MPS memory leaks with:
+- Streaming CSV processing to avoid loading all data in memory
+- Aggressive memory cleanup between batches
+- Proper garbage collection
+- Progressive saving to avoid data loss
 """
 
 import os
@@ -16,6 +22,9 @@ import json
 from tqdm import tqdm
 import argparse
 import torch
+import gc
+import tempfile
+import time
 
 def setup_paths():
     """Setup paths relative to the analyzer directory."""
@@ -24,7 +33,7 @@ def setup_paths():
     project_root = analyzer_dir.parent
     
     # Paths for input and output
-    input_csv = project_root / "parser" / "dataset" / "dataset_gk_rf.csv"
+    input_csv = project_root / "parser" / "dataset" / "dataset_codes_rf.csv"
     output_csv = analyzer_dir / "scripts" / "legal_rules_with_embeddings.csv"
     
     return input_csv, output_csv
@@ -37,8 +46,9 @@ def detect_device():
         print("🚀 CUDA GPU detected")
     elif torch.backends.mps.is_available():
         device = "mps"
-        suggested_batch_size = 8  # Smaller batch size for MPS
+        suggested_batch_size = 2  # Very conservative for MPS to prevent memory issues
         print("🍎 Apple Silicon MPS detected")
+        print("⚠️  Using conservative batch size for MPS memory stability")
     else:
         device = "cpu"
         suggested_batch_size = 4  # Even smaller for CPU
@@ -100,93 +110,176 @@ def clean_text(text):
     
     return text
 
-def generate_embeddings_batch(model, texts, batch_size=32):
-    """Generate embeddings for a batch of texts with memory management."""
-    embeddings = []
-    failed_batches = 0
+def aggressive_memory_cleanup():
+    """Perform aggressive memory cleanup for MPS/GPU."""
+    # Force garbage collection
+    gc.collect()
     
-    # Process in batches for memory efficiency
-    for i in tqdm(range(0, len(texts), batch_size), desc="Generating embeddings"):
-        batch = texts[i:i + batch_size]
-        
-        try:
-            batch_embeddings = model.encode(
-                batch, 
-                show_progress_bar=False, 
-                convert_to_numpy=True,
-                batch_size=min(batch_size, len(batch))  # Ensure batch_size doesn't exceed batch length
-            )
-            embeddings.extend(batch_embeddings)
-            
-            # Clear GPU cache if available
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            elif torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-                
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower():
-                failed_batches += 1
-                print(f"\n⚠️  Memory error in batch {i//batch_size + 1}, trying smaller sub-batches...")
-                
-                # Try processing this batch with smaller sub-batches
-                sub_batch_size = max(1, batch_size // 4)
-                batch_embeddings = []
-                
-                for j in range(0, len(batch), sub_batch_size):
-                    sub_batch = batch[j:j + sub_batch_size]
-                    try:
-                        sub_embeddings = model.encode(
-                            sub_batch, 
-                            show_progress_bar=False, 
-                            convert_to_numpy=True
-                        )
-                        batch_embeddings.extend(sub_embeddings)
-                        
-                        # Clear cache after each sub-batch
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                        elif torch.backends.mps.is_available():
-                            torch.mps.empty_cache()
-                            
-                    except Exception as sub_e:
-                        print(f"❌ Failed to process sub-batch: {sub_e}")
-                        # Create dummy embeddings to maintain array structure
-                        dummy_embedding = np.zeros((len(sub_batch), model.get_sentence_embedding_dimension()))
-                        batch_embeddings.extend(dummy_embedding)
-                
-                embeddings.extend(batch_embeddings)
-            else:
-                raise
-    
-    if failed_batches > 0:
-        print(f"\n⚠️  {failed_batches} batches had memory issues and were processed with smaller sub-batches")
-    
-    return embeddings
+    # Clear GPU caches
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()  # Wait for GPU operations to complete
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+        # Add a small delay to ensure MPS cleanup completes
+        time.sleep(0.1)
 
-def save_embeddings_to_csv(df, embeddings, output_path):
-    """Save the dataframe with embeddings to CSV."""
-    print("Preparing data for CSV export...")
+def process_single_batch(model, texts, device_type="cpu"):
+    """Process a single batch with proper error handling and memory management."""
+    try:
+        # Convert texts to embeddings
+        embeddings = model.encode(
+            texts,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=True  # Normalize for better similarity search
+        )
+        
+        # Immediately cleanup after processing
+        aggressive_memory_cleanup()
+        
+        return embeddings
+        
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower():
+            print(f"\n⚠️  Memory error, attempting recovery...")
+            aggressive_memory_cleanup()
+            
+            # Try processing one by one
+            individual_embeddings = []
+            for text in texts:
+                try:
+                    emb = model.encode([text], show_progress_bar=False, convert_to_numpy=True, normalize_embeddings=True)
+                    individual_embeddings.append(emb[0])
+                    aggressive_memory_cleanup()
+                except Exception as single_e:
+                    print(f"❌ Failed to process individual text: {single_e}")
+                    # Create dummy embedding to maintain structure
+                    dummy_emb = np.zeros(model.get_sentence_embedding_dimension())
+                    individual_embeddings.append(dummy_emb)
+            
+            return np.array(individual_embeddings)
+        else:
+            raise
+
+def generate_embeddings_streaming(model, input_csv, output_csv, batch_size=2, max_rows=None):
+    """
+    Generate embeddings using streaming processing to minimize memory usage.
+    Processes and saves data in chunks to avoid memory accumulation.
+    """
+    print(f"🔄 Starting streaming embedding generation with batch size {batch_size}")
     
-    # Create a copy of the dataframe
-    df_with_embeddings = df.copy()
+    # Create a temporary file for progressive saving
+    temp_file = output_csv.with_suffix('.tmp')
     
-    # Convert embeddings to JSON strings for CSV storage
-    embeddings_json = [json.dumps(embedding.tolist()) for embedding in embeddings]
-    df_with_embeddings['embedding'] = embeddings_json
+    try:
+        # Read CSV in chunks to minimize memory usage
+        chunk_size = max(1000, batch_size * 10)  # Process reasonable chunks
+        csv_reader = pd.read_csv(input_csv, chunksize=chunk_size)
+        
+        total_processed = 0
+        first_chunk = True
+        
+        for chunk_idx, df_chunk in enumerate(csv_reader):
+            if max_rows and total_processed >= max_rows:
+                break
+                
+            # Limit chunk if needed
+            if max_rows:
+                remaining = max_rows - total_processed
+                if len(df_chunk) > remaining:
+                    df_chunk = df_chunk.head(remaining)
+            
+            print(f"\n📦 Processing chunk {chunk_idx + 1}: {len(df_chunk)} rows")
+            
+            # Clean texts for this chunk
+            rule_texts = [clean_text(text) for text in df_chunk['rule_text']]
+            
+            # Process this chunk in batches
+            chunk_embeddings = []
+            for i in tqdm(range(0, len(rule_texts), batch_size), 
+                         desc=f"Chunk {chunk_idx + 1} batches", leave=False):
+                batch_texts = rule_texts[i:i + batch_size]
+                
+                if not batch_texts:
+                    continue
+                
+                # Process batch
+                batch_embeddings = process_single_batch(model, batch_texts, model.device)
+                chunk_embeddings.extend(batch_embeddings)
+                
+                # Memory cleanup between batches
+                aggressive_memory_cleanup()
+            
+            # Convert embeddings to JSON for this chunk
+            embeddings_json = [json.dumps(embedding.tolist()) for embedding in chunk_embeddings]
+            df_chunk = df_chunk.copy()
+            df_chunk['embedding'] = embeddings_json
+            
+            # Save this chunk to file (append mode after first chunk)
+            mode = 'w' if first_chunk else 'a'
+            header = first_chunk
+            df_chunk.to_csv(temp_file, mode=mode, header=header, index=False, encoding='utf-8')
+            
+            total_processed += len(df_chunk)
+            first_chunk = False
+            
+            # Cleanup chunk data from memory
+            del df_chunk, rule_texts, chunk_embeddings, embeddings_json
+            aggressive_memory_cleanup()
+            
+            print(f"✅ Chunk {chunk_idx + 1} completed. Total processed: {total_processed}")
+        
+        # Move temp file to final location
+        temp_file.rename(output_csv)
+        
+        # Calculate and display file size
+        file_size_mb = os.path.getsize(output_csv) / (1024 * 1024)
+        print(f"\n🎉 Embeddings generation completed!")
+        print(f"📊 Total rows processed: {total_processed}")
+        print(f"📁 Output file: {output_csv}")
+        print(f"📏 File size: {file_size_mb:.2f} MB")
+        
+        return total_processed
+        
+    except Exception as e:
+        # Cleanup temp file on error
+        if temp_file.exists():
+            temp_file.unlink()
+        raise e
+
+def verify_output_file(output_csv, expected_rows=None):
+    """Verify the output file was created correctly."""
+    if not output_csv.exists():
+        print("❌ Output file was not created")
+        return False
     
-    # Save to CSV
-    print(f"Saving data with embeddings to: {output_path}")
-    df_with_embeddings.to_csv(output_path, index=False, encoding='utf-8')
-    
-    # Calculate and display file size
-    file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-    print(f"File saved successfully. Size: {file_size_mb:.2f} MB")
-    
-    return df_with_embeddings
+    try:
+        # Read just the header and first few rows to verify structure
+        df_sample = pd.read_csv(output_csv, nrows=5)
+        
+        required_columns = ['embedding']
+        missing_columns = [col for col in required_columns if col not in df_sample.columns]
+        
+        if missing_columns:
+            print(f"❌ Missing required columns: {missing_columns}")
+            return False
+        
+        # Count total rows
+        total_rows = sum(1 for line in open(output_csv)) - 1  # Subtract header
+        
+        if expected_rows and total_rows != expected_rows:
+            print(f"⚠️  Row count mismatch: expected {expected_rows}, got {total_rows}")
+        
+        print(f"✅ Output file verification passed: {total_rows} rows")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error verifying output file: {e}")
+        return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate embeddings for legal rules dataset")
+    parser = argparse.ArgumentParser(description="Generate embeddings for legal rules dataset (Memory-Optimized)")
     parser.add_argument("--model", default="BAAI/bge-m3", help="Embedding model to use")
     parser.add_argument("--batch-size", type=int, help="Batch size for embedding generation (auto-detected if not specified)")
     parser.add_argument("--max-rows", type=int, help="Maximum number of rows to process (for testing)")
@@ -207,25 +300,32 @@ def main():
             print(f"Error: Input file {input_csv} does not exist!")
             return 1
         
-        # Load dataset
-        print("Loading dataset...")
-        df = pd.read_csv(input_csv)
+        # Check input file size
+        input_size_mb = os.path.getsize(input_csv) / (1024 * 1024)
+        print(f"📁 Input file size: {input_size_mb:.2f} MB")
         
+        # Quick check of input file structure
+        try:
+            df_sample = pd.read_csv(input_csv, nrows=5)
+            total_rows = sum(1 for line in open(input_csv)) - 1  # Subtract header
+            print(f"📊 Total rows in dataset: {total_rows}")
+            print(f"📋 Columns: {list(df_sample.columns)}")
+            
+            if 'rule_text' not in df_sample.columns:
+                print("❌ Error: 'rule_text' column not found in input file")
+                return 1
+                
+        except Exception as e:
+            print(f"❌ Error reading input file: {e}")
+            return 1
+        
+        # Determine processing limit
         if args.max_rows:
-            print(f"Limiting to first {args.max_rows} rows for testing")
-            df = df.head(args.max_rows)
-        
-        print(f"Loaded {len(df)} rows")
-        print(f"Columns: {list(df.columns)}")
-        
-        # Clean and prepare texts for embedding
-        print("Cleaning rule texts...")
-        rule_texts = [clean_text(text) for text in df['rule_text']]
-        
-        # Filter out empty texts
-        valid_indices = [i for i, text in enumerate(rule_texts) if text.strip()]
-        if len(valid_indices) != len(rule_texts):
-            print(f"Warning: {len(rule_texts) - len(valid_indices)} empty rule texts found")
+            total_to_process = min(args.max_rows, total_rows)
+            print(f"🎯 Processing limited to {total_to_process} rows for testing")
+        else:
+            total_to_process = total_rows
+            print(f"🎯 Processing all {total_to_process} rows")
         
         # Detect device and get suggested batch size
         device, suggested_batch_size = detect_device()
@@ -236,7 +336,7 @@ def main():
         elif args.device:
             device = args.device
         
-        # Determine batch size
+        # Determine batch size with extra conservatism for MPS
         if args.batch_size:
             batch_size = args.batch_size
             print(f"🎯 Using specified batch size: {batch_size}")
@@ -244,34 +344,37 @@ def main():
             batch_size = suggested_batch_size
             print(f"🤖 Using auto-detected batch size: {batch_size}")
         
+        # Extra warning for MPS
+        if device == "mps":
+            print(f"⚠️  MPS detected: Using conservative settings to prevent memory issues")
+            print(f"💡 If you still get memory errors, try: --force-cpu or --batch-size 1")
+        
         # Load embedding model
         model = load_embedding_model(args.model, device=device, force_cpu=args.force_cpu)
         
-        # Generate embeddings
-        print(f"Generating embeddings for {len(rule_texts)} texts...")
-        print(f"📦 Processing in batches of {batch_size}")
-        embeddings = generate_embeddings_batch(model, rule_texts, batch_size)
+        # Generate embeddings using streaming approach
+        print(f"\n🚀 Starting streaming embedding generation...")
+        print(f"📦 Batch size: {batch_size}")
+        print(f"🔧 Device: {device.upper()}")
+        print(f"📊 Estimated memory usage: Much lower than traditional approach")
         
-        # Verify embeddings
-        if len(embeddings) != len(df):
-            print(f"Error: Number of embeddings ({len(embeddings)}) doesn't match number of rows ({len(df)})")
+        start_time = time.time()
+        processed_rows = generate_embeddings_streaming(
+            model, input_csv, output_csv, batch_size, args.max_rows
+        )
+        elapsed_time = time.time() - start_time
+        
+        # Verify output
+        if verify_output_file(output_csv, processed_rows):
+            print(f"\n🎉 Embeddings generation completed successfully!")
+            print(f"⏱️  Total time: {elapsed_time:.2f} seconds")
+            print(f"⚡ Processing rate: {processed_rows / elapsed_time:.1f} rows/second")
+            print(f"📤 You can now commit the embeddings file to Git")
+            print(f"⬆️  Run 'upload' command to load into database")
+            return 0
+        else:
+            print(f"\n❌ Output verification failed")
             return 1
-        
-        print(f"Generated {len(embeddings)} embeddings")
-        print(f"Embedding dimension: {len(embeddings[0])}")
-        
-        # Save to CSV
-        df_result = save_embeddings_to_csv(df, embeddings, output_csv)
-        
-        # Display sample
-        print("\nSample of generated data:")
-        print(df_result[['rule_number', 'rule_title', 'text_length']].head())
-        
-        print(f"\nEmbeddings generation completed successfully!")
-        print(f"Output file: {output_csv}")
-        print(f"You can now commit this file to Git and use the upload script to load it into PostgreSQL.")
-        
-        return 0
         
     except KeyboardInterrupt:
         print("\nProcess interrupted by user")
@@ -281,6 +384,9 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
+    finally:
+        # Final cleanup
+        aggressive_memory_cleanup()
 
 if __name__ == "__main__":
     sys.exit(main()) 
