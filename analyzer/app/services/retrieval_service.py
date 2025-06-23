@@ -157,6 +157,23 @@ class RetrievalService:
         self.default_distance_function = distance_function
         logger.info(f"Distance function changed to: {distance_function.value}")
 
+    def get_all_embeddings_and_labels(self, db: Session):
+        """
+        Retrieve all embeddings and their file_name labels from the legal_rules table.
+        Returns:
+            embeddings: List[List[float]]
+            labels: List[str]
+        """
+        rules = db.query(LegalRule).filter(LegalRule.embedding != None).all()
+        embeddings = []
+        labels = []
+        for r in rules:
+            emb = self._parse_embedding(r.embedding)
+            if emb:
+                embeddings.append(emb)
+                labels.append(r.file_name or str(r.id))
+        return embeddings, labels
+
 
 # Global retrieval service instance
 retrieval_service = RetrievalService() 
