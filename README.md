@@ -38,10 +38,20 @@
 
 ### Prerequisites
 - Docker and Docker Compose
+- Git LFS (Large File Storage) for handling the embeddings dataset
 - OpenRouter API key ([Get one here](https://openrouter.ai/))
 
 ### 1. Clone and Setup
 ```bash
+# Install Git LFS (if not already installed)
+# macOS: brew install git-lfs
+# Ubuntu: sudo apt install git-lfs
+# Windows: Download from https://git-lfs.github.io/
+
+# Initialize Git LFS
+git lfs install
+
+# Clone the repository (LFS will automatically download large files)
 git clone <repository-url>
 cd SmartClause
 
@@ -62,10 +72,12 @@ docker-compose up --build -d
 ```
 
 ### 4. Setup Vector Database
-After the services are running, set up the vector database. This script uploads the pre-computed legal article embeddings to PostgreSQL.
+After the services are running, set up the vector database. This script uploads the pre-computed legal article embeddings (>200MB, automatically downloaded via Git LFS) to PostgreSQL.
 ```bash
 docker-compose exec analyzer python scripts/manage_embeddings.py upload --clear-existing
 ```
+
+**Note**: The embeddings file (`legal_rules_with_embeddings.csv`) is stored using Git LFS and should be automatically downloaded when you clone the repository. If you encounter issues, ensure Git LFS is properly installed and run `git lfs pull`.
 
 ### 5. Access the Application
 - **🌐 Web Application**: [http://localhost:8080](http://localhost:8080)
@@ -144,19 +156,35 @@ The `analyzer/.env` file contains the following configuration options:
 ### Vector Database Management
 Use `docker-compose exec` to run management commands inside the `analyzer` container.
 ```bash
-# Generate embeddings from scratch (if needed)
-docker-compose exec analyzer python scripts/manage_embeddings.py generate
-
-# Upload embeddings to database
+# Upload pre-computed embeddings to database (recommended)
 docker-compose exec analyzer python scripts/manage_embeddings.py upload --clear-existing
+
+# Generate embeddings from scratch (only if needed - takes 45-60 minutes)
+docker-compose exec analyzer python scripts/manage_embeddings.py generate
 
 # Full setup (generate + upload)
 docker-compose exec analyzer python scripts/manage_embeddings.py full --clear-existing
 ```
 
-**Note for Apple Silicon users**: If you encounter memory issues while generating embeddings, use the `--force-cpu` flag:
+**Note for Apple Silicon users**: The embedding generation script has been optimized for MPS memory management. If you still encounter memory issues while generating embeddings, use:
 ```bash
+# Force CPU usage (slower but stable)
 docker-compose exec analyzer python scripts/manage_embeddings.py generate --force-cpu
+
+# Ultra-conservative mode for memory-constrained systems
+docker-compose exec analyzer python scripts/manage_embeddings.py generate --force-cpu --batch-size 1
+```
+
+**Git LFS Troubleshooting**: If the embeddings file wasn't downloaded properly:
+```bash
+# Verify LFS installation
+git lfs version
+
+# Download LFS files manually
+git lfs pull
+
+# Check file size (should be ~212MB)
+ls -lh analyzer/scripts/legal_rules_with_embeddings.csv
 ```
 
 ## 📚 API Documentation
@@ -205,8 +233,9 @@ curl -X POST "http://localhost:8001/api/v1/embed" \
 
 The platform includes a comprehensive Civil Code dataset:
 - **4,400+ legal articles** with pre-computed embeddings
-- **44MB+ vector database** for efficient semantic search
+- **212MB embeddings file** stored via Git LFS for efficient distribution
 - **Structured metadata** (sections, chapters, article numbers)
 - **BAAI/bge-m3 embeddings** for high-quality semantic understanding
+- **Memory-optimized generation** with streaming processing for Apple Silicon compatibility
 
 For detailed analyzer-specific documentation, see [`analyzer/README.md`](analyzer/README.md).
