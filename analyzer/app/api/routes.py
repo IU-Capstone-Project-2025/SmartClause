@@ -5,11 +5,14 @@ from typing import List
 import logging
 from ..core.database import get_db, engine
 from ..schemas.requests import RetrieveRequest, AnalyzeRequest, EmbedRequest
-from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse, EmbedResponse
+from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthResponse, EmbedResponse, RetrievalMetricsResponse
 from ..services.analyzer_service import analyzer_service
 from ..services.embedding_service import embedding_service
 from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..core.config import settings
+from ..models.database import LegalRule
+import numpy as np
+from sklearn.metrics import silhouette_score
 
 logger = logging.getLogger(__name__)
 
@@ -161,4 +164,56 @@ async def embed_text(request: EmbedRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during embedding generation"
-        ) 
+        )
+
+
+@router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)
+async def retrieval_metrics(db: Session = Depends(get_db)):
+    """
+    Compute intrinsic retrieval metrics for all embeddings in the legal_rules table.
+    - Total dimension variance
+    - Silhouette Score (document = cluster, by file_name)
+    - Effective Intrinsic Dimensionality (EID) and Dimensionality Redundancy (DR)
+    """
+    # Use the retrieval service to get all embeddings and labels
+    embeddings, labels = retrieval_service.get_all_embeddings_and_labels(db)
+    if not embeddings or len(embeddings) < 2:
+        return RetrievalMetricsResponse(
+            total_variance=0.0,
+            silhouette_score=0.0,
+            eid=0.0,
+            dr=0.0
+        )
+    embeddings = np.array(embeddings)
+    labels = np.array(labels)
+
+    # 1. Total dimension variance
+    dim_variances = np.var(embeddings, axis=0)
+    total_variance = float(np.sum(dim_variances))
+
+    # 2. Silhouette Score (cosine distance, group by file_name)
+    try:
+        sil_score = float(silhouette_score(embeddings, labels, metric='cosine'))
+    except Exception:
+        sil_score = 0.0
+
+    # 3. EID & DR (alpha=0.95)
+    variances = np.var(embeddings, axis=0)
+    sorted_vars = np.sort(variances)[::-1]
+    total_var = np.sum(sorted_vars)
+    cumsum = np.cumsum(sorted_vars) / total_var if total_var > 0 else np.zeros_like(sorted_vars)
+    alpha = 0.95
+    j_alpha = int(np.argmax(cumsum >= alpha))
+    S_j = cumsum[j_alpha-1] if j_alpha > 0 else 0
+    if total_var > 0 and sorted_vars[j_alpha] > 0:
+        eid = j_alpha + (alpha - S_j) / sorted_vars[j_alpha]
+    else:
+        eid = 0.0
+    dr = 1.0 - eid / len(sorted_vars) if len(sorted_vars) > 0 else 0.0
+
+    return RetrievalMetricsResponse(
+        total_variance=total_variance,
+        silhouette_score=sil_score,
+        eid=float(eid),
+        dr=float(dr)
+    ) 
