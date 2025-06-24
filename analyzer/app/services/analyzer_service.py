@@ -9,11 +9,10 @@ from ..schemas.requests import AnalyzeRequest, RetrieveRequest
 from ..schemas.responses import (
     AnalysisPoint, AnalyzeResponse, DocumentPointAnalysis
 )
-from ..models.database import AnalysisResult
 from .embedding_service import embedding_service
 from .document_parser import document_parser
 from .retrieval_service import retrieval_service
-from .retry_utils import RetryMixin, concurrency_manager, with_retry, with_concurrency_limit
+from .retry_utils import RetryMixin, concurrency_manager
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +37,6 @@ class AnalyzerService(RetryMixin):
         
         # Performance monitoring
         analysis_start = datetime.now()
-        metrics = {
-            "total_points": 0,
-            "successful_points": 0,
-            "failed_points": 0,
-            "embedding_failures": 0,
-            "retrieval_failures": 0,
-            "llm_failures": 0,
-        }
         
         try:
             # Parse document asynchronously
@@ -57,7 +48,6 @@ class AnalyzerService(RetryMixin):
             )
             parse_duration = (datetime.now() - parse_start).total_seconds()
             
-            metrics["total_points"] = len(document_points)
             logger.info(f"Document parsed in {parse_duration:.2f}s - split into {len(document_points)} points")
             
             if not document_points:
@@ -69,20 +59,20 @@ class AnalyzerService(RetryMixin):
             analyzed_points = await self._analyze_points_concurrently(document_points, document_text, db)
             analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
             
-            # Calculate metrics
-            for point in analyzed_points:
-                if len(point.analysis_points) > 0 and point.analysis_points[0].cause != "Не удалось провести автоматический анализ":
-                    metrics["successful_points"] += 1
-                else:
-                    metrics["failed_points"] += 1
-            
+            # Calculate success metrics
+            successful_points = sum(
+                1 for point in analyzed_points 
+                if (len(point.analysis_points) > 0 and 
+                    point.analysis_points[0].cause != "Не удалось провести автоматический анализ")
+            )
+            total_points = len(analyzed_points)
             total_duration = (datetime.now() - analysis_start).total_seconds()
             
             logger.info(
                 f"Analysis completed in {total_duration:.2f}s "
                 f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
-                f"Success rate: {metrics['successful_points']}/{metrics['total_points']} "
-                f"({(metrics['successful_points']/metrics['total_points']*100):.1f}%)"
+                f"Success rate: {successful_points}/{total_points} "
+                f"({(successful_points/total_points*100):.1f}%)"
             )
             
             # Create response
@@ -118,7 +108,7 @@ class AnalyzerService(RetryMixin):
         embedding_tasks = [
             concurrency_manager.with_embedding_limit(
                 asyncio.wait_for(
-                    self._generate_embedding_with_timeout(point.content),
+                    self._generate_embedding(point.content),
                     timeout=settings.embedding_timeout
                 )
             )
@@ -133,7 +123,7 @@ class AnalyzerService(RetryMixin):
         logger.info(f"Processing {total_points} points with global concurrency limits")
         analysis_tasks = [
             concurrency_manager.with_global_limit(
-                self._analyze_single_point_with_timeout(
+                self._analyze_single_point(
                     point,
                     document_text,
                     embeddings[i],
@@ -162,12 +152,12 @@ class AnalyzerService(RetryMixin):
         
         return analyzed_points
 
-    async def _generate_embedding_with_timeout(self, content: str):
-        """Generate embedding with timeout protection"""
+    async def _generate_embedding(self, content: str):
+        """Generate embedding for content"""
         return await asyncio.to_thread(embedding_service.encode_to_list, content)
 
-    async def _analyze_single_point_with_timeout(self, point, document_text: str, embedding, db: Session) -> DocumentPointAnalysis:
-        """Analyze a single point with timeout protection and retry logic"""
+    async def _analyze_single_point(self, point, document_text: str, embedding, db: Session) -> DocumentPointAnalysis:
+        """Analyze a single document point"""
         point_start = datetime.now()
         logger.debug(f"Starting analysis for point {point.point_number}")
         
@@ -191,25 +181,14 @@ class AnalyzerService(RetryMixin):
                     context = "Контекст недоступен из-за ошибки поиска"
             
             # Create prompt
-            base_prompt = await self._create_prompt_async(point.content, document_text)
-            final_prompt = base_prompt.replace("{context}", context)
+            prompt = await self._create_prompt(point.content, document_text)
+            final_prompt = prompt.replace("{context}", context)
             
-            # Call LLM with concurrency limit and simple timeout
-            try:
-                llm_response = await concurrency_manager.with_llm_limit(
-                    asyncio.wait_for(
-                        self._call_llm_with_timeout(final_prompt),
-                        timeout=settings.llm_timeout
-                    )
-                )
-            except asyncio.TimeoutError:
-                logger.warning(f"LLM timeout for point {point.point_number}")
-                llm_response = self._get_mock_response()
-            except Exception as e:
-                logger.warning(f"LLM call failed for point {point.point_number}: {e}")
-                llm_response = self._get_mock_response()
-            
-            analysis_points = self._parse_llm_response(llm_response)
+            # Call LLM with retry logic for parsing failures
+            analysis_points = await self._call_llm_with_parsing_retry(
+                final_prompt, 
+                point.point_number
+            )
             
             duration = (datetime.now() - point_start).total_seconds()
             logger.debug(f"Completed analysis for point {point.point_number} in {duration:.2f} seconds")
@@ -227,7 +206,7 @@ class AnalyzerService(RetryMixin):
             return self._create_fallback_analysis(point)
 
     async def _get_context_from_retrieval_service(self, point_content: str, db: Session, k: int = 5) -> str:
-        """Get context by calling the retrieval service with improved error handling"""
+        """Get relevant legal context for the point"""
         try:
             # Create a RetrieveRequest for the retrieval service
             retrieve_request = RetrieveRequest(
@@ -259,8 +238,76 @@ class AnalyzerService(RetryMixin):
             logger.error(f"Failed to retrieve context from service: {e}")
             return "Контекст недоступен из-за ошибки поиска"
 
-    async def _create_prompt_async(self, point_content: str, full_document: str) -> str:
-        """Create analysis prompt template"""
+    async def _call_llm_with_parsing_retry(self, prompt: str, point_number: int) -> List[AnalysisPoint]:
+        """Call LLM with retry logic specifically for parsing failures"""
+        max_attempts = settings.max_retries + 1
+        
+        for attempt in range(max_attempts):
+            try:
+                # Make LLM call with concurrency limit and timeout
+                llm_response = await concurrency_manager.with_llm_limit(
+                    asyncio.wait_for(
+                        self._call_llm(prompt),
+                        timeout=settings.llm_timeout
+                    )
+                )
+                
+                # Try to parse the response
+                analysis_points = self._parse_llm_response(llm_response)
+                
+                # Check if parsing was successful (not default fallback)
+                if (analysis_points and 
+                    len(analysis_points) > 0 and 
+                    analysis_points[0].cause != "Не удалось провести автоматический анализ"):
+                    logger.debug(f"Successfully parsed LLM response for point {point_number} on attempt {attempt + 1}")
+                    return analysis_points
+                else:
+                    # Parsing failed, but this counts as a "parsing failure"
+                    if attempt < max_attempts - 1:
+                        delay = settings.retry_delay * (settings.retry_backoff_factor ** attempt)
+                        logger.warning(
+                            f"Point {point_number}: LLM response parsing failed on attempt {attempt + 1}/{max_attempts}. "
+                            f"Retrying in {delay:.2f} seconds..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        logger.error(f"Point {point_number}: All {max_attempts} parsing attempts failed")
+                        return self._get_default_analysis()
+                        
+            except asyncio.TimeoutError:
+                if attempt < max_attempts - 1:
+                    delay = settings.retry_delay * (settings.retry_backoff_factor ** attempt)
+                    logger.warning(
+                        f"Point {point_number}: LLM timeout on attempt {attempt + 1}/{max_attempts}. "
+                        f"Retrying in {delay:.2f} seconds..."
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    logger.error(f"Point {point_number}: LLM timeout on all {max_attempts} attempts")
+                    return self._get_default_analysis()
+                    
+            except Exception as e:
+                if attempt < max_attempts - 1:
+                    delay = settings.retry_delay * (settings.retry_backoff_factor ** attempt)
+                    error_msg = str(e) if str(e).strip() else type(e).__name__
+                    logger.warning(
+                        f"Point {point_number}: LLM call failed on attempt {attempt + 1}/{max_attempts} ({error_msg}). "
+                        f"Retrying in {delay:.2f} seconds..."
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    error_msg = str(e) if str(e).strip() else type(e).__name__
+                    logger.error(f"Point {point_number}: LLM call failed on all {max_attempts} attempts ({error_msg})")
+                    return self._get_default_analysis()
+        
+        # This shouldn't be reached, but just in case
+        return self._get_default_analysis()
+
+    async def _create_prompt(self, point_content: str, full_document: str) -> str:
+        """Create LLM prompt for legal analysis"""
         return f"""
 Вы — старший юрист-практик по договорному праву РФ.
 Отвечаете строго на русском.
@@ -299,8 +346,8 @@ class AnalyzerService(RetryMixin):
 - Учитывайте российское законодательство
 """
 
-    async def _call_llm_with_timeout(self, prompt: str) -> str:
-        """Call LLM with timeout protection and improved error handling"""
+    async def _call_llm(self, prompt: str) -> str:
+        """Call LLM for analysis"""
         if self.openai_client is None:
             return self._get_mock_response()
         
@@ -340,9 +387,7 @@ class AnalyzerService(RetryMixin):
             # Return mock response as fallback
             return self._get_mock_response()
 
-    async def _call_llm_async(self, prompt: str) -> str:
-        """Legacy method for backward compatibility - delegates to new timeout version"""
-        return await self._call_llm_with_timeout(prompt)
+
 
     def _parse_llm_response(self, llm_response: str) -> List[AnalysisPoint]:
         """Parse LLM response into AnalysisPoint objects"""
@@ -350,6 +395,7 @@ class AnalyzerService(RetryMixin):
             import json
             
             if not llm_response or not llm_response.strip():
+                logger.debug("Empty LLM response received")
                 return self._get_default_analysis()
             
             # Extract JSON from response
@@ -360,24 +406,40 @@ class AnalyzerService(RetryMixin):
             if json_start != -1 and json_end > json_start:
                 json_text = text[json_start:json_end]
             else:
-                json_text = text
+                logger.debug(f"No JSON array found in LLM response: {text[:100]}...")
+                return self._get_default_analysis()
             
             # Parse JSON response
-            analysis_data = json.loads(json_text)
+            try:
+                analysis_data = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                logger.debug(f"JSON decode error: {e}. Response fragment: {json_text[:200]}...")
+                return self._get_default_analysis()
+            
+            if not isinstance(analysis_data, list):
+                logger.debug(f"LLM response is not a list: {type(analysis_data)}")
+                return self._get_default_analysis()
             
             analysis_points = []
-            for item in analysis_data:
+            for i, item in enumerate(analysis_data):
                 if isinstance(item, dict) and all(key in item for key in ['cause', 'risk', 'recommendation']):
                     analysis_points.append(AnalysisPoint(
                         cause=item['cause'],
                         risk=item['risk'],
                         recommendation=item['recommendation']
                     ))
+                else:
+                    logger.debug(f"Invalid analysis item {i}: missing required keys or not a dict")
             
-            return analysis_points if analysis_points else self._get_default_analysis()
+            if analysis_points:
+                logger.debug(f"Successfully parsed {len(analysis_points)} analysis points")
+                return analysis_points
+            else:
+                logger.debug("No valid analysis points found in response")
+                return self._get_default_analysis()
             
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.error(f"Failed to parse LLM response: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in LLM response parsing: {e}")
             return self._get_default_analysis()
 
     def _get_mock_response(self) -> str:
@@ -418,7 +480,7 @@ class AnalyzerService(RetryMixin):
             points=[]
         )
 
-    # Async wrapper methods for document processing
+    # Document processing methods
     async def _parse_document_async(self, content: bytes) -> str:
         """Parse document asynchronously"""
         return await asyncio.to_thread(document_parser.parse_document, content)

@@ -70,12 +70,12 @@ class RetrievalService:
                         r.file,
                         r.rule_number,
                         r.rule_title,
-                        rc.chunk_text,
+                        r.rule_text,
                         r.section_title,
                         r.chapter_title,
-                        rc.chunk_char_start,
-                        rc.chunk_char_end,
-                        (rc.chunk_char_end - rc.chunk_char_start) as text_length,
+                        r.start_char,
+                        r.end_char,
+                        r.text_length,
                         rc.embedding,
                         {distance_query} as similarity_score
                     FROM rule_chunks rc
@@ -105,14 +105,14 @@ class RetrievalService:
                     rule_title=row.rule_title,
                     section_title=row.section_title,
                     chapter_title=row.chapter_title,
-                    start_char=row.chunk_char_start,
-                    end_char=row.chunk_char_end,
+                    start_char=row.start_char,
+                    end_char=row.end_char,
                     text_length=row.text_length
                 )
                 
                 # Create result object
                 retrieve_result = RetrieveResult(
-                    text=row.chunk_text,
+                    text=row.rule_text,
                     embedding=embedding_list,
                     metadata=metadata,
                     similarity_score=float(row.similarity_score)
