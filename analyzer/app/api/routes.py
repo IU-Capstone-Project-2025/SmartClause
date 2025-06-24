@@ -10,7 +10,7 @@ from ..services.analyzer_service import analyzer_service
 from ..services.embedding_service import embedding_service
 from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..core.config import settings
-from ..models.database import LegalRule
+from ..models.database import Rule, RuleChunk
 import numpy as np
 from sklearn.metrics import silhouette_score
 
@@ -38,20 +38,21 @@ async def health_check():
     )
 
 
-@router.post("/retrieve", response_model=RetrieveResponse)
-async def retrieve_documents(
+@router.post("/retrieve-chunk", response_model=RetrieveResponse)
+async def retrieve_chunks(
     request: RetrieveRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve relevant documents based on query using distance-based similarity
+    Retrieve relevant document chunks based on query using distance-based similarity
     
     This endpoint performs semantic search over the legal document corpus
     and returns the k most relevant text chunks with their embeddings and metadata.
     Supports configurable distance functions: cosine, l2, inner_product.
+    Note: This may return multiple chunks from the same rule.
     """
     try:
-        logger.info(f"Retrieve request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
+        logger.info(f"Retrieve chunks request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
         
         # Validate k parameter
         if request.k > settings.max_k:
@@ -76,7 +77,7 @@ async def retrieve_documents(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in retrieve_documents: {e}")
+        logger.error(f"Error in retrieve_chunks: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during document retrieval"
@@ -124,16 +125,49 @@ async def analyze_document(
         )
 
 
-@router.post("/retrieve-json", response_model=RetrieveResponse)
-async def retrieve_documents_json(
+@router.post("/retrieve-rules", response_model=RetrieveResponse)
+async def retrieve_rules(
     request: RetrieveRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Alternative JSON endpoint for retrieve (for easier testing)
-    Same functionality as /retrieve but explicitly named for JSON requests
+    Retrieve k unique rules based on query using distance-based similarity
+    
+    This endpoint performs semantic search over the legal document corpus
+    and returns the k most relevant unique rules (not chunks) with their best matching chunks.
+    Each rule appears only once in the results, represented by its most relevant chunk.
     """
-    return await retrieve_documents(request, db)
+    try:
+        logger.info(f"Retrieve rules request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
+        
+        # Validate k parameter
+        if request.k > settings.max_k:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"k cannot exceed {settings.max_k}"
+            )
+        
+        # Convert string distance function to enum
+        distance_func = DistanceFunction(request.distance_function)
+        
+        # Use the retrieval service method for rules
+        response = await retrieval_service.retrieve_rules(request, db, distance_func)
+        return response
+        
+    except ValueError as e:
+        # Handle invalid distance function
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid distance function: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in retrieve_rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during rule retrieval"
+        )
 
 
 @router.post("/embed", response_model=EmbedResponse)
@@ -167,10 +201,16 @@ async def embed_text(request: EmbedRequest):
         )
 
 
+
+
+
+
+
+
 @router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)
 async def retrieval_metrics(db: Session = Depends(get_db)):
     """
-    Compute intrinsic retrieval metrics for all embeddings in the legal_rules table.
+    Compute intrinsic retrieval metrics for all embeddings in the rule_chunks table.
     - Total dimension variance
     - Silhouette Score (document = cluster, by file_name)
     - Effective Intrinsic Dimensionality (EID) and Dimensionality Redundancy (DR)
