@@ -199,6 +199,39 @@ curl -X POST "http://localhost:8001/api/v1/retrieve-chunk" \
 
 ## Monitoring
 
-- Health endpoint: `GET /health`
-- API documentation: `GET /docs`
-- Alternative docs: `GET /redoc` 
+Health check endpoint available at `/health` for basic service monitoring.
+
+## Performance Optimizations
+
+The analyzer service includes advanced performance optimizations for production use:
+
+- **Configurable Concurrency Limits**: Environment variables to control CPU usage and prevent resource exhaustion
+- **Retry Mechanisms**: Automatic retry with exponential backoff for transient failures
+- **Resource Management**: Semaphore-based throttling for LLM calls, embeddings, and retrieval operations
+- **Timeout Protection**: Configurable timeouts to prevent hanging operations
+- **Performance Monitoring**: Built-in metrics and health check endpoints
+
+### Quick Setup
+
+Add these environment variables for optimal performance:
+
+```bash
+# Concurrency control
+MAX_CONCURRENT_THREADS=4
+MAX_CONCURRENT_LLM_CALLS=2  
+MAX_CONCURRENT_EMBEDDINGS=8
+
+# Retry and timeout settings
+MAX_RETRIES=3
+LLM_TIMEOUT=30
+EMBEDDING_TIMEOUT=10
+```
+
+For complete documentation, see [OPTIMIZATION_README.md](OPTIMIZATION_README.md).
+
+### Performance Testing
+
+```bash
+# Run optimization test suite
+python test_optimizations.py
+``` 

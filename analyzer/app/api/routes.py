@@ -201,6 +201,12 @@ async def embed_text(request: EmbedRequest):
         )
 
 
+
+
+
+
+
+
 @router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)
 async def retrieval_metrics(db: Session = Depends(get_db)):
     """
