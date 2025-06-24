@@ -41,31 +41,22 @@ async def retrieve_documents(
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve relevant documents based on query using distance-based similarity
-    
-    This endpoint performs semantic search over the legal document corpus
-    and returns the k most relevant text chunks with their embeddings and metadata.
-    Supports configurable distance functions: cosine, l2, inner_product.
+    Retrieve relevant documents based on query using either vector or BM25+RRF search,
+    depending on RETRIEVAL_USE_BM25 env variable.
     """
     try:
-        logger.info(f"Retrieve request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
-        
-        # Validate k parameter
+        logger.info(f"Retrieve request: query='{request.query[:50]}...', k={request.k}, bm25={settings.retrieval_use_bm25}")
         if request.k > settings.max_k:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"k cannot exceed {settings.max_k}"
             )
-        
-        # Convert string distance function to enum
-        distance_func = DistanceFunction(request.distance_function)
-        
-        # Use the new retrieval service with distance-based similarity
-        response = await retrieval_service.retrieve_documents(request, db, distance_func)
-        return response
-        
+        if settings.retrieval_use_bm25:
+            return await retrieval_service.retrieve_documents_bm25_rrf(request, db)
+        else:
+            distance_func = DistanceFunction(request.distance_function)
+            return await retrieval_service.retrieve_documents(request, db, distance_func)
     except ValueError as e:
-        # Handle invalid distance function
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid distance function: {str(e)}"

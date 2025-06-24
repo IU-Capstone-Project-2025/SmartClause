@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 import numpy as np
+from rank_bm25 import BM25Okapi
+import pymorphy2
+from stop_words import get_stop_words
 
 from ..schemas.requests import RetrieveRequest
 from ..schemas.responses import RetrieveResponse, RetrieveResult, DocumentMetadata
@@ -156,6 +159,87 @@ class RetrievalService:
         """Change the default distance function"""
         self.default_distance_function = distance_function
         logger.info(f"Distance function changed to: {distance_function.value}")
+
+    def _preprocess_bm25(self, text, morph=None, stopwords=None):
+        if morph is None:
+            morph = pymorphy2.MorphAnalyzer()
+        if stopwords is None:
+            stopwords = set(get_stop_words("ru"))
+        tokens = [w for w in text.lower().split() if w.isalpha()]
+        tokens = [morph.normal_forms(w)[0] for w in tokens if w not in stopwords]
+        return tokens
+
+    async def retrieve_documents_bm25_rrf(
+        self,
+        request: 'RetrieveRequest',
+        db: 'Session',
+        c: int = 60
+    ) -> 'RetrieveResponse':
+        """
+        Retrieve relevant documents using BM25 + vector search with RRF re-ranking.
+        """
+        # 1. Retrieve all documents
+        rules = db.query(LegalRule).filter(LegalRule.embedding != None).all()
+        texts = [r.rule_text for r in rules]
+        ids = [r.id for r in rules]
+        metadatas = [
+            DocumentMetadata(
+                file_name=r.file_name,
+                rule_number=r.rule_number,
+                rule_title=r.rule_title,
+                section_title=r.section_title,
+                chapter_title=r.chapter_title,
+                start_char=r.start_char,
+                end_char=r.end_char,
+                text_length=r.text_length
+            ) for r in rules
+        ]
+        embeddings = [self._parse_embedding(r.embedding) for r in rules]
+
+        # 2. BM25
+        morph = pymorphy2.MorphAnalyzer()
+        stopwords = set(get_stop_words("ru"))
+        corpus = [self._preprocess_bm25(text, morph, stopwords) for text in texts]
+        bm25 = BM25Okapi(corpus)
+        query_tokens = self._preprocess_bm25(request.query, morph, stopwords)
+        bm25_scores = bm25.get_scores(query_tokens)
+        bm25_ranked = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
+
+        # 3. Vector search (use the existing method)
+        vector_response = await self.retrieve_documents(request, db)
+        vector_rule_numbers = [r.metadata.rule_number for r in vector_response.results]
+        vector_ranked = [ids.index(rules[i].id) for i, r in enumerate(rules) if r.rule_number in vector_rule_numbers]
+
+        # 4. RRF
+        def rrf(idx, ranked_list):
+            try:
+                return ranked_list.index(idx)
+            except ValueError:
+                return len(ranked_list)
+
+        rrf_scores = {}
+        for i in range(len(ids)):
+            rv = rrf(i, vector_ranked)
+            rf = rrf(i, bm25_ranked)
+            rrf_scores[i] = 1/(c + rv) + 1/(c + rf)
+
+        # 5. Final output (top-k)
+        top_rrf = sorted(rrf_scores, key=rrf_scores.get, reverse=True)[:request.k]
+        results = []
+        for idx in top_rrf:
+            results.append(RetrieveResult(
+                text=texts[idx],
+                embedding=embeddings[idx],
+                metadata=metadatas[idx],
+                similarity_score=float(rrf_scores[idx])
+            ))
+
+        return RetrieveResponse(
+            results=results,
+            total_results=len(results),
+            query=request.query,
+            distance_function=f'rrf_bm25+vector'
+        )
 
 
 # Global retrieval service instance
