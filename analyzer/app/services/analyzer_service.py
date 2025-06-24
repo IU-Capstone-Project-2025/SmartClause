@@ -5,13 +5,14 @@ import asyncio
 from sqlalchemy.orm import Session
 from openai import OpenAI
 from ..core.config import settings
-from ..schemas.requests import AnalyzeRequest
+from ..schemas.requests import AnalyzeRequest, RetrieveRequest
 from ..schemas.responses import (
     AnalysisPoint, AnalyzeResponse, DocumentPointAnalysis
 )
 from ..models.database import AnalysisResult
 from .embedding_service import embedding_service
 from .document_parser import document_parser
+from .retrieval_service import retrieval_service
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class AnalyzerService:
             
             # Batch process everything concurrently
             start_time = datetime.now()
-            analyzed_points = await self._analyze_points_concurrently(document_points, document_text)
+            analyzed_points = await self._analyze_points_concurrently(document_points, document_text, db)
             duration = (datetime.now() - start_time).total_seconds()
             
             logger.info(f"Completed concurrent analysis of {len(analyzed_points)} points in {duration:.2f} seconds")
@@ -72,7 +73,7 @@ class AnalyzerService:
             logger.error(f"Failed to analyze document: {e}")
             raise
 
-    async def _analyze_points_concurrently(self, document_points, document_text: str) -> List[DocumentPointAnalysis]:
+    async def _analyze_points_concurrently(self, document_points, document_text: str, db: Session) -> List[DocumentPointAnalysis]:
         """Analyze all document points concurrently with optimized batching"""
         
         # Step 1: Generate all embeddings concurrently
@@ -86,7 +87,7 @@ class AnalyzerService:
         # Step 2: Process all points concurrently (retrieval + LLM calls)
         logger.info(f"Starting concurrent analysis of {len(document_points)} points")
         analysis_tasks = [
-            self._analyze_single_point(point, document_text, embeddings[i])
+            self._analyze_single_point(point, document_text, embeddings[i], db)
             for i, point in enumerate(document_points)
         ]
         
@@ -103,14 +104,14 @@ class AnalyzerService:
         
         return analyzed_points
 
-    async def _analyze_single_point(self, point, document_text: str, embedding) -> DocumentPointAnalysis:
+    async def _analyze_single_point(self, point, document_text: str, embedding, db: Session) -> DocumentPointAnalysis:
         """Analyze a single point with concurrent retrieval and LLM processing"""
         point_start = datetime.now()
         logger.info(f"Starting analysis for point {point.point_number}")
         
         try:
-            # Run retrieval and prompt creation concurrently
-            context_task = self._get_context_async(embedding) if not isinstance(embedding, Exception) else asyncio.create_task(asyncio.sleep(0, result="Контекст недоступен"))
+            # Run retrieval and prompt creation concurrently using the retrieval service
+            context_task = self._get_context_from_retrieval_service(point.content, db) if not isinstance(embedding, Exception) else asyncio.create_task(asyncio.sleep(0, result="Контекст недоступен"))
             prompt_task = asyncio.create_task(self._create_prompt_async(point.content, document_text))
             
             context, base_prompt = await asyncio.gather(context_task, prompt_task)
@@ -134,45 +135,36 @@ class AnalyzerService:
             logger.error(f"Failed to analyze point {point.point_number}: {e}")
             return self._create_fallback_analysis(point)
 
-    async def _get_context_async(self, embedding: List[float], k: int = 5) -> str:
-        """Get context using pre-computed embedding with separate DB session"""
-        if not embedding:
-            return "Контекст недоступен"
-            
-        def _db_query():
-            from sqlalchemy import text
-            from ..core.database import SessionLocal
-            
-            db = SessionLocal()
-            try:
-                query_vector = f"[{','.join(map(str, embedding))}]"
-                sql = text(f"""
-                    SELECT r.rule_title, rc.chunk_text
-                    FROM rule_chunks rc
-                    JOIN rules r ON rc.rule_id = r.rule_id
-                    WHERE rc.embedding IS NOT NULL
-                    ORDER BY (1 - (rc.embedding <=> '{query_vector}')) DESC
-                    LIMIT :k
-                """)
-                
-                rows = db.execute(sql, {"k": k}).fetchall()
-                chunks = []
-                for row in rows:
-                    if row.rule_title:
-                        chunks.append(f"{row.rule_title}: {row.chunk_text}")
-                    else:
-                        chunks.append(row.chunk_text)
-                return chunks
-            finally:
-                db.close()
-        
+    async def _get_context_from_retrieval_service(self, point_content: str, db: Session, k: int = 5) -> str:
+        """Get context by calling the retrieval service directly"""
         try:
-            chunks = await asyncio.to_thread(_db_query)
+            # Create a RetrieveRequest for the retrieval service
+            retrieve_request = RetrieveRequest(
+                query=point_content,
+                k=k,
+                distance_function="cosine"
+            )
+            
+            # Call the retrieval service directly
+            response = await retrieval_service.retrieve_rules(retrieve_request, db)
+            
+            # Format the retrieved rules for context
+            chunks = []
+            for result in response.results:
+                rule_title = result.metadata.rule_title or ""
+                text = result.text
+                
+                if rule_title:
+                    chunks.append(f"{rule_title}: {text}")
+                else:
+                    chunks.append(text)
+            
             context = "\n\n".join(chunks)
-            logger.info(f"Retrieved {len(chunks)} relevant documents: {len(context)} characters")
+            logger.info(f"Retrieved {len(chunks)} relevant rules from service: {len(context)} characters")
             return context
+                
         except Exception as e:
-            logger.error(f"Failed to retrieve context: {e}")
+            logger.error(f"Failed to retrieve context from service: {e}")
             return "Контекст недоступен"
 
     async def _create_prompt_async(self, point_content: str, full_document: str) -> str:

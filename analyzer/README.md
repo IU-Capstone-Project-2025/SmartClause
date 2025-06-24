@@ -11,14 +11,15 @@ A RAG-based legal document analysis microservice built with FastAPI, LangChain, 
 
 ## API Endpoints
 
-### `/api/v1/retrieve` (POST)
-Retrieve relevant documents based on query using RAG.
+### `/api/v1/retrieve-chunk` (POST)
+Retrieve relevant document chunks based on query using RAG. May return multiple chunks from the same rule.
 
 **Request:**
 ```json
 {
   "query": "contract termination conditions",
-  "k": 5
+  "k": 5,
+  "distance_function": "cosine"
 }
 ```
 
@@ -28,13 +29,35 @@ Retrieve relevant documents based on query using RAG.
   "results": [
     {
       "text": "Legal article text...",
-      "embedding": [0.123, -0.456, ...]
+      "embedding": [0.123, -0.456, ...],
+      "metadata": {
+        "file_name": "Civil_Code.doc",
+        "rule_title": "Article 123",
+        "rule_number": "123",
+        "section_title": "Contract Termination"
+      },
+      "similarity_score": 0.85
     }
   ],
   "total_results": 5,
-  "query": "contract termination conditions"
+  "query": "contract termination conditions",
+  "distance_function": "cosine"
 }
 ```
+
+### `/api/v1/retrieve-rules` (POST)
+Retrieve k unique rules (not chunks) based on query using RAG. Each rule appears only once, represented by its most relevant chunk.
+
+**Request:**
+```json
+{
+  "query": "contract termination conditions", 
+  "k": 5,
+  "distance_function": "cosine"
+}
+```
+
+**Response:** Same format as `/retrieve-chunk` but guarantees unique rules.
 
 ### `/api/v1/analyze` (POST)
 Analyze a document file for legal risks and recommendations.
@@ -169,7 +192,7 @@ See [`scripts/README.md`](scripts/README.md) for detailed documentation.
 pytest
 
 # Test API endpoints
-curl -X POST "http://localhost:8001/api/v1/retrieve-json" \
+curl -X POST "http://localhost:8001/api/v1/retrieve-chunk" \
   -H "Content-Type: application/json" \
   -d '{"query": "test query", "k": 3}'
 ```
