@@ -10,7 +10,7 @@ from ..services.analyzer_service import analyzer_service
 from ..services.embedding_service import embedding_service
 from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..core.config import settings
-from ..models.database import LegalRule
+from ..models.database import Rule, RuleChunk
 import numpy as np
 from sklearn.metrics import silhouette_score
 
@@ -170,7 +170,7 @@ async def embed_text(request: EmbedRequest):
 @router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)
 async def retrieval_metrics(db: Session = Depends(get_db)):
     """
-    Compute intrinsic retrieval metrics for all embeddings in the legal_rules table.
+    Compute intrinsic retrieval metrics for all embeddings in the rule_chunks table.
     - Total dimension variance
     - Silhouette Score (document = cluster, by file_name)
     - Effective Intrinsic Dimensionality (EID) and Dimensionality Redundancy (DR)

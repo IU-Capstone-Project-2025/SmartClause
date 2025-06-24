@@ -7,7 +7,7 @@ import numpy as np
 
 from ..schemas.requests import RetrieveRequest
 from ..schemas.responses import RetrieveResponse, RetrieveResult, DocumentMetadata
-from ..models.database import LegalRule
+from ..models.database import Rule, RuleChunk
 from .embedding_service import embedding_service
 
 logger = logging.getLogger(__name__)
@@ -61,20 +61,21 @@ class RetrievalService:
             # Execute the similarity search
             sql_query = text(f"""
                 SELECT 
-                    id,
-                    file_name,
-                    rule_number,
-                    rule_title,
-                    rule_text,
-                    section_title,
-                    chapter_title,
-                    start_char,
-                    end_char,
-                    text_length,
-                    embedding,
+                    rc.chunk_id,
+                    r.file,
+                    r.rule_number,
+                    r.rule_title,
+                    rc.chunk_text,
+                    r.section_title,
+                    r.chapter_title,
+                    rc.chunk_char_start,
+                    rc.chunk_char_end,
+                    (rc.chunk_char_end - rc.chunk_char_start) as text_length,
+                    rc.embedding,
                     {distance_query} as similarity_score
-                FROM legal_rules 
-                WHERE embedding IS NOT NULL
+                FROM rule_chunks rc
+                JOIN rules r ON rc.rule_id = r.rule_id
+                WHERE rc.embedding IS NOT NULL
                 ORDER BY similarity_score {"ASC" if distance_function == DistanceFunction.L2 else "DESC"}
                 LIMIT :k
             """)
@@ -90,19 +91,19 @@ class RetrievalService:
                 
                 # Create metadata object
                 metadata = DocumentMetadata(
-                    file_name=row.file_name,
+                    file_name=row.file,
                     rule_number=row.rule_number,
                     rule_title=row.rule_title,
                     section_title=row.section_title,
                     chapter_title=row.chapter_title,
-                    start_char=row.start_char,
-                    end_char=row.end_char,
+                    start_char=row.chunk_char_start,
+                    end_char=row.chunk_char_end,
                     text_length=row.text_length
                 )
                 
                 # Create result object
                 retrieve_result = RetrieveResult(
-                    text=row.rule_text,
+                    text=row.chunk_text,
                     embedding=embedding_list,
                     metadata=metadata,
                     similarity_score=float(row.similarity_score)
@@ -159,19 +160,19 @@ class RetrievalService:
 
     def get_all_embeddings_and_labels(self, db: Session):
         """
-        Retrieve all embeddings and their file_name labels from the legal_rules table.
+        Retrieve all embeddings and their file_name labels from the rule_chunks table.
         Returns:
             embeddings: List[List[float]]
             labels: List[str]
         """
-        rules = db.query(LegalRule).filter(LegalRule.embedding != None).all()
+        chunks = db.query(RuleChunk).join(Rule).filter(RuleChunk.embedding != None).all()
         embeddings = []
         labels = []
-        for r in rules:
-            emb = self._parse_embedding(r.embedding)
+        for chunk in chunks:
+            emb = self._parse_embedding(chunk.embedding)
             if emb:
                 embeddings.append(emb)
-                labels.append(r.file_name or str(r.id))
+                labels.append(chunk.rule.file or f"chunk_{chunk.chunk_id}")
         return embeddings, labels
 
 

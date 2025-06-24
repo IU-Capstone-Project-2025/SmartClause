@@ -147,10 +147,11 @@ class AnalyzerService:
             try:
                 query_vector = f"[{','.join(map(str, embedding))}]"
                 sql = text(f"""
-                    SELECT rule_title, rule_text
-                    FROM legal_rules 
-                    WHERE embedding IS NOT NULL
-                    ORDER BY (1 - (embedding <=> '{query_vector}')) DESC
+                    SELECT r.rule_title, rc.chunk_text
+                    FROM rule_chunks rc
+                    JOIN rules r ON rc.rule_id = r.rule_id
+                    WHERE rc.embedding IS NOT NULL
+                    ORDER BY (1 - (rc.embedding <=> '{query_vector}')) DESC
                     LIMIT :k
                 """)
                 
@@ -158,9 +159,9 @@ class AnalyzerService:
                 chunks = []
                 for row in rows:
                     if row.rule_title:
-                        chunks.append(f"{row.rule_title}: {row.rule_text}")
+                        chunks.append(f"{row.rule_title}: {row.chunk_text}")
                     else:
-                        chunks.append(row.rule_text)
+                        chunks.append(row.chunk_text)
                 return chunks
             finally:
                 db.close()
