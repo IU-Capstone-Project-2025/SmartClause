@@ -1,3 +1,4 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
 analyzer/scripts/*.csv filter=lfs diff=lfs merge=lfs -text
+analyzer/scripts/datasets/*.csv filter=lfs diff=lfs merge=lfs -text
