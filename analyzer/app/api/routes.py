@@ -44,32 +44,19 @@ async def retrieve_chunks(
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve relevant document chunks based on query using distance-based similarity
-    
-    This endpoint performs semantic search over the legal document corpus
-    and returns the k most relevant text chunks with their embeddings and metadata.
-    Supports configurable distance functions: cosine, l2, inner_product.
-    Note: This may return multiple chunks from the same rule.
+    Retrieve relevant document chunks based on query using hybrid BM25+vector+RRF search (unique chunks).
     """
     try:
         logger.info(f"Retrieve chunks request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
-        
-        # Validate k parameter
         if request.k > settings.max_k:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"k cannot exceed {settings.max_k}"
             )
-        
-        # Convert string distance function to enum
         distance_func = DistanceFunction(request.distance_function)
-        
-        # Use the new retrieval service with distance-based similarity
-        response = await retrieval_service.retrieve_documents(request, db, distance_func)
+        response = await retrieval_service.retrieve_chunks_rrf(request, db, distance_func)
         return response
-        
     except ValueError as e:
-        # Handle invalid distance function
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid distance function: {str(e)}"
@@ -131,31 +118,19 @@ async def retrieve_rules(
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve k unique rules based on query using distance-based similarity
-    
-    This endpoint performs semantic search over the legal document corpus
-    and returns the k most relevant unique rules (not chunks) with their best matching chunks.
-    Each rule appears only once in the results, represented by its most relevant chunk.
+    Retrieve k unique rules (articles) based on query using hybrid BM25+vector+RRF search (unique rules).
     """
     try:
         logger.info(f"Retrieve rules request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
-        
-        # Validate k parameter
         if request.k > settings.max_k:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"k cannot exceed {settings.max_k}"
             )
-        
-        # Convert string distance function to enum
         distance_func = DistanceFunction(request.distance_function)
-        
-        # Use the retrieval service method for rules
-        response = await retrieval_service.retrieve_rules(request, db, distance_func)
+        response = await retrieval_service.retrieve_rules_rrf(request, db, distance_func)
         return response
-        
     except ValueError as e:
-        # Handle invalid distance function
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid distance function: {str(e)}"
@@ -199,12 +174,6 @@ async def embed_text(request: EmbedRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during embedding generation"
         )
-
-
-
-
-
-
 
 
 @router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)

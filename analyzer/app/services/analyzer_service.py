@@ -212,7 +212,7 @@ class AnalyzerService(RetryMixin):
             retrieve_request = RetrieveRequest(
                 query=point_content,
                 k=k,
-                distance_function="cosine"
+                distance_function="l2"
             )
             
             # Call the retrieval service directly

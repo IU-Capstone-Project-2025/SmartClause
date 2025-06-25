@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     site_url: Optional[str] = os.getenv("SITE_URL", "SmartClause")
     site_name: Optional[str] = os.getenv("SITE_NAME", "SmartClause Legal Analyzer")
     
+    retrieval_use_bm25: bool = True
+    
     class Config:
         env_file = ".env"
         extra = "allow"  # Allow extra fields from environment
