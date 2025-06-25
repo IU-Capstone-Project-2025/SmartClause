@@ -13,9 +13,9 @@
               <Upload :size="20" />
               Select File
             </button>
-            <p class="formats">Supported formats: .docx, .png, .jpg, .jpeg</p>
+            <p class="formats">Supported formats: .docx, .pdf</p>
           </div>
-          <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none;" accept=".docx,.png,.jpg,.jpeg">
+          <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none;" accept=".docx,.pdf">
         </div>
       </div>
     </div>
