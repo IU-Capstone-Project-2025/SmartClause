@@ -5,47 +5,54 @@
 ## 🎯 What You Can Do
 
 **Ready to use out of the box:**
-- **Upload and Analyze Documents**: Upload legal documents (up to 10MB) and get AI-powered risk analysis and recommendations
-- **Semantic Legal Search**: Search through a comprehensive Civil Code database using natural language queries
-- **Interactive Web Interface**: Complete workflow from document upload to detailed analysis results
-- **Real-time Processing**: Watch your documents being processed with live status updates
-- **REST API Access**: Full programmatic access to all analysis capabilities
+- **📄 Upload and Analyze Documents**: Upload legal documents (up to 10MB) and get AI-powered risk analysis and recommendations
+- **🔍 Semantic Legal Search**: Search through a comprehensive Civil Code database using natural language queries
+- **💻 Interactive Web Interface**: Complete workflow from document upload to detailed analysis results
+- **⚡ Real-time Processing**: Watch your documents being processed with live status updates
+- **🔗 REST API Access**: Full programmatic access to all analysis capabilities
 
 ## ✨ Key Features
 
-### Document Analysis Pipeline
+### 📋 Document Analysis Pipeline
 - **Smart Upload Interface**: Drag-and-drop document upload with progress tracking
 - **AI-Powered Analysis**: Legal document analysis for risks, compliance issues, and recommendations
 - **Comprehensive Results**: Detailed analysis with causes, risks, and actionable recommendations
 - **Multiple File Formats**: Support for text files and structured documents
 
-### Legal Knowledge Base
+### 📚 Legal Knowledge Base
 - **Chunked Civil Code Database**: Complete Russian Civil Code with 190,000+ rules and 413,000+ text chunks with embeddings
 - **Semantic Search**: Vector-based similarity search using BAAI/bge-m3 embeddings on text chunks
 - **Configurable Retrieval**: Multiple distance functions (cosine, L2, inner product)
 - **Structured Metadata**: Articles organized by sections, chapters, and legal references with precise chunk positioning
 
-### Technology Stack
+### 🛠️ Technology Stack
 - **Frontend**: Vue.js 3 with modern UI components and routing
 - **Backend**: Spring Boot REST API with Swagger documentation
 - **AI Engine**: FastAPI microservice with LangChain and OpenRouter integration
 - **Database**: PostgreSQL with pgvector extension for vector operations
-- **LLM Integration**: OpenAI GPT-4o via OpenRouter for analysis generation
+- **LLM Integration**: Google Gemini 2.5 Flash via OpenRouter for analysis generation
 - **Embeddings**: BAAI/bge-m3 sentence transformer for semantic understanding
 - **Deployment**: Docker Compose orchestration for easy setup
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose
-- Git LFS (Large File Storage) for handling the embeddings dataset
-- OpenRouter API key ([Get one here](https://openrouter.ai/))
+- **Docker and Docker Compose** (required)
+- **Git LFS** (required for dataset files)
+- **OpenRouter API Key** ([Get one here](https://openrouter.ai/)) - ask team leader for access
 
-### 1. Clone and Setup
+### 1. Install Git LFS and Clone Repository
+
+**⚠️ Important: Install Git LFS before cloning to ensure dataset files download properly.**
+
 ```bash
 # Install Git LFS (if not already installed)
-# macOS: brew install git-lfs
-# Ubuntu: sudo apt install git-lfs
+# macOS:
+brew install git-lfs
+
+# Ubuntu/Debian:
+sudo apt install git-lfs
+
 # Windows: Download from https://git-lfs.github.io/
 
 # Initialize Git LFS
@@ -55,58 +62,65 @@ git lfs install
 git clone <repository-url>
 cd SmartClause
 
-# Copy environment template
-cp analyzer/env.example analyzer/.env
+# Verify dataset files were downloaded (should show ~500MB+ file)
+ls -lh analyzer/scripts/datasets/chunks_with_embeddings.csv
 ```
 
 ### 2. Configure Environment
-Edit `analyzer/.env` and add your OpenRouter API key (ask team leader for the key):
+
 ```bash
-OPENROUTER_API_KEY=your_api_key_here
+# Copy environment template
+cp analyzer/env.example analyzer/.env
+
+# Edit the .env file and add your OpenRouter API key
+# Replace 'your_openrouter_api_key_here' with actual key
+```
+
+**Required configuration in `analyzer/.env`:**
+```bash
+OPENROUTER_API_KEY=your_actual_api_key_here
 ```
 
 ### 3. Launch the Platform
-The first launch will take a while to download the embeddings model.
+
 ```bash
+# Build and start all services (first launch may take 10-15 minutes)
 docker-compose up --build -d
+
+# Monitor the startup process
+docker-compose logs -f
 ```
 
-### 4. Setup Database and Load Legal Dataset
+**Note**: The first launch will download the BAAI/bge-m3 model (~2GB) and may take some time.
 
-#### Option A: Quick Setup (Recommended)
-If you already have the processed datasets, use the unified script:
+### 4. Initialize Database and Load Legal Dataset
 
+**Option A: Quick Setup (Recommended)**
 ```bash
-# Initialize database with new schema
-docker-compose exec analyzer python scripts/init_db.py
-
-# Upload everything to database
+# Load the complete legal dataset (413k+ chunks with embeddings)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
 ```
 
-#### Option B: Step-by-Step Setup
-If you want more control over the process:
-
+**Option B: Generate Embeddings from Scratch**
+Only if you don't have the pre-generated embeddings file:
 ```bash
-# 1. Initialize database
-docker-compose exec analyzer python scripts/init_db.py
-
-# 2. Generate embeddings only (optional - takes time)
+# Generate embeddings (takes 1-2 hours)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate
 
-# 3. Upload to database
+# Upload to database
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
 ```
 
-**Note**: The first run will download the BAAI/bge-m3 model (~2GB) and generate embeddings for 413,000+ text chunks, which may take 1-2 hours depending on your hardware.
-
 ### 5. Access the Application
-- **🌐 Web Application**: [http://localhost:8080](http://localhost:8080)
-- **📋 Backend API**: [http://localhost:8000](http://localhost:8000)
-- **🔍 AI Analysis API**: [http://localhost:8001](http://localhost:8001)
-- **📚 API Documentation**: [http://localhost:8001/docs](http://localhost:8001/docs)
 
-**You're ready to analyze legal documents!** 🎉
+Once setup is complete, access these URLs:
+
+- **🌐 Web Application**: [http://localhost:8080](http://localhost:8080) - Main user interface
+- **📋 Backend API**: [http://localhost:8000](http://localhost:8000) - Document processing API
+- **🔍 AI Analysis API**: [http://localhost:8001](http://localhost:8001) - RAG and analysis API
+- **📚 API Documentation**: [http://localhost:8001/docs](http://localhost:8001/docs) - Interactive API docs
+
+**🎉 You're ready to analyze legal documents!**
 
 ## 🖥️ User Interface
 
@@ -124,7 +138,7 @@ The platform provides a complete web interface with three main screens:
 
 ## 📊 Database Structure
 
-The new optimized database structure separates rules metadata from searchable chunks:
+The optimized database structure separates rules metadata from searchable chunks:
 
 ### Tables
 - **`rules`**: Complete legal rules with metadata (190,000+ entries)
@@ -145,88 +159,33 @@ The new optimized database structure separates rules metadata from searchable ch
 
 ## 📁 Dataset Files
 
-The system uses two main datasets located in `analyzer/scripts/datasets/`:
+The system uses datasets located in `analyzer/scripts/datasets/`:
 
-- **`datasets/rules_dataset.csv`**: Complete legal rules metadata (33MB, 190,846 rules)
-- **`datasets/chunks_dataset.csv`**: Text chunks for embedding (65MB, 413,453 chunks)
-- **`datasets/chunks_with_embeddings.csv`**: Generated file with embeddings (auto-created)
+- **`rules_dataset.csv`**: Complete legal rules metadata (33MB, 190,846 rules)
+- **`chunks_dataset.csv`**: Text chunks for embedding (65MB, 413,453 chunks)
+- **`chunks_with_embeddings.csv`**: Pre-generated embeddings file (~500MB, Git LFS)
 
-These datasets are automatically detected and processed by the unified script.
-
-## 🔧 Advanced Configuration
-
-### Environment Variables
-The `analyzer/.env` file contains the following configuration options:
-
-**Required:**
-- `OPENROUTER_API_KEY`: Your OpenRouter API key for LLM integration
-
-**Database (pre-configured for Docker):**
-- `POSTGRES_DB=smartclause_analyzer`
-- `POSTGRES_USER=smartclause` 
-- `POSTGRES_PASSWORD=smartclause`
-- `DATABASE_URL=postgresql://smartclause:smartclause@postgres:5432/smartclause_analyzer`
-
-**Optional:**
-- `OPENROUTER_MODEL`: LLM model to use (default: `openai/gpt-4o`)
-- `EMBEDDING_MODEL`: Embedding model (default: `BAAI/bge-m3`)
-- `MAX_FILE_SIZE`: File upload size limit in bytes (default: 10MB)
-- `DEFAULT_K`: Default number of documents to retrieve in RAG (default: 5)
-- `MAX_K`: Maximum number of documents to retrieve (default: 20)
-
-### Dataset Processing Options
-
-The unified script `process_and_upload_datasets.py` provides flexible options:
-
-```bash
-# Generate embeddings only (no database upload)
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate
-
-# Upload existing embeddings (if chunks_with_embeddings.csv exists)
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload
-
-# Full process: generate embeddings and upload
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --upload --clear
-
-# Batch processing with custom batch size
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --upload --batch-size 50
-
-# Non-interactive mode (skip confirmations)
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --no-confirm
-```
-
-**Git LFS Troubleshooting**: If the embeddings file wasn't downloaded properly:
-```bash
-# Verify LFS installation
-git lfs version
-
-# Download LFS files manually
-git lfs pull
-
-# Check file size
-ls -lh analyzer/scripts/chunks_with_embeddings.csv
-```
+**Git LFS Files**: The embeddings file is stored using Git LFS due to its size. Ensure Git LFS is installed before cloning.
 
 ## 📚 API Documentation
 
-### Available Endpoints
+### Core Endpoints
 
-#### Analyzer API (Port 8001)
+#### 🔍 Analyzer API (Port 8001)
 - **GET /health**: Health check with database connectivity status
-- **POST /api/v1/retrieve-chunk**: Semantic document chunk retrieval with configurable similarity functions
+- **POST /api/v1/retrieve-chunk**: Semantic document chunk retrieval
 - **POST /api/v1/retrieve-rules**: Semantic retrieval of unique legal rules
 - **POST /api/v1/analyze**: Legal document analysis with risk assessment
 - **POST /api/v1/embed**: Text embedding generation
 - **GET /api/v1/metrics/retrieval**: Embedding quality metrics
-- **GET /docs**: Interactive API documentation
 
-#### Backend API (Port 8000)
+#### 🔄 Backend API (Port 8000)
 - **POST /api/v1/get_analysis**: Document upload and analysis orchestration
 - **GET /api/v1/health**: Service health check
 
 ### API Usage Examples
 
-#### Retrieval
+#### Semantic Search
 ```bash
 curl -X POST "http://localhost:8001/api/v1/retrieve-rules" \
   -H "Content-Type: application/json" \
@@ -251,102 +210,215 @@ curl -X POST "http://localhost:8001/api/v1/embed" \
   -d '{"text": "Your text to embed"}'
 ```
 
-#### Retrieval Metrics
+## 🔧 Advanced Configuration
+
+### Environment Variables
+
+The `analyzer/.env` file supports these configuration options:
+
+**Required:**
 ```bash
-curl -X GET "http://localhost:8001/api/v1/metrics/retrieval"
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
 
-## 🔍 Legal Dataset Details
+**Database (pre-configured for Docker):**
+```bash
+POSTGRES_DB=smartclause_analyzer
+POSTGRES_USER=smartclause
+POSTGRES_PASSWORD=smartclause
+DATABASE_URL=postgresql://smartclause:smartclause@postgres:5432/smartclause_analyzer
+```
 
-The platform includes a comprehensive chunked Civil Code dataset:
-- **190,846 legal rules** with complete metadata
-- **413,453 text chunks** with optimized 800-character chunks and 500-character overlap
-- **BAAI/bge-m3 embeddings** (1024-dimensional) for high-quality semantic understanding
-- **Structured relationships** between rules and their constituent chunks
-- **Memory-optimized processing** with batch generation and streaming
+**Model Configuration:**
+```bash
+OPENROUTER_MODEL=google/gemini-2.5-flash-lite-preview-06-17  # Default LLM
+EMBEDDING_MODEL=BAAI/bge-m3                                   # Default embeddings
+EMBEDDING_DIMENSION=1024
+```
 
-### Dataset Processing Pipeline
-1. **Rules Extraction**: Legal articles parsed from source documents
-2. **Text Chunking**: Rules split into overlapping chunks for better semantic coverage
-3. **Embedding Generation**: Each chunk encoded using BAAI/bge-m3 model
-4. **Database Upload**: Rules and chunks stored with proper foreign key relationships
+**Performance Settings:**
+```bash
+MAX_FILE_SIZE=10485760              # 10MB file upload limit
+DEFAULT_K=5                         # Default retrieval count
+MAX_K=20                           # Maximum retrieval count
+MAX_CONCURRENT_THREADS=4           # Concurrent operations
+MAX_CONCURRENT_LLM_CALLS=10        # Concurrent LLM calls
+MAX_CONCURRENT_EMBEDDINGS=8        # Concurrent embedding generation
+```
+
+**Timeout and Retry Settings:**
+```bash
+LLM_TIMEOUT=90                     # LLM API timeout (seconds)
+EMBEDDING_TIMEOUT=15               # Embedding timeout (seconds)
+MAX_RETRIES=3                      # Retry attempts
+RETRY_DELAY=1.0                    # Initial retry delay
+RETRY_BACKOFF_FACTOR=2.0           # Exponential backoff
+```
+
+### Dataset Processing Options
+
+The unified script `process_and_upload_datasets.py` provides flexible options:
+
+```bash
+# Upload existing embeddings (if file exists)
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
+
+# Generate embeddings from scratch (takes 1-2 hours)
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --upload --clear
+
+# Batch processing with custom batch size
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 50
+
+# Non-interactive mode (skip confirmations)
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --no-confirm
+```
 
 ## 🚧 Troubleshooting
 
 ### Common Issues
 
-**Memory Issues During Embedding Generation:**
+#### Git LFS Problems
+```bash
+# Verify LFS installation
+git lfs version
+
+# Check if LFS files were downloaded
+git lfs ls-files
+ls -lh analyzer/scripts/datasets/chunks_with_embeddings.csv
+
+# Re-download LFS files if needed
+git lfs pull
+
+# If embeddings file is missing or small, re-download:
+git lfs fetch
+git lfs checkout
+```
+
+#### Memory Issues During Embedding Generation
 ```bash
 # Use smaller batch sizes
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 10
 
 # Monitor memory usage
 docker stats
+
+# For low-memory systems, generate embeddings externally and transfer the file
 ```
 
-**Database Connection Issues:**
+#### Database Connection Issues
 ```bash
 # Check database container status
 docker-compose ps postgres
 
-# Restart database
+# View database logs
+docker-compose logs postgres
+
+# Restart database service
 docker-compose restart postgres
 
-# Check logs
-docker-compose logs postgres
+# Reset database completely
+docker-compose down -v
+docker-compose up postgres -d
 ```
 
-**Missing Dataset Files:**
+#### Service Startup Issues
 ```bash
-# Verify files are in place
-docker-compose exec analyzer ls -la scripts/datasets/*.csv
+# Check all service logs
+docker-compose logs
 
-# Copy files if missing (from host)
+# Check specific service
+docker-compose logs analyzer
+
+# Rebuild containers if needed
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+#### Missing Dataset Files
+```bash
+# Verify dataset files exist
+docker-compose exec analyzer ls -la scripts/datasets/
+
+# If files are missing, check original locations:
+ls -la parser/dataset/dataset_codes_rf.csv
+ls -la experiments/dataset_codes_rf_chunking_800chunksize_500overlap.csv
+
+# Copy files manually if needed
 docker cp parser/dataset/dataset_codes_rf.csv $(docker-compose ps -q analyzer):/app/scripts/datasets/rules_dataset.csv
-docker cp experiments/dataset_codes_rf_chunking_800chunksize_500overlap.csv $(docker-compose ps -q analyzer):/app/scripts/datasets/chunks_dataset.csv
+```
+
+#### API Key Issues
+```bash
+# Verify environment file exists
+ls -la analyzer/.env
+
+# Check if API key is properly set
+docker-compose exec analyzer env | grep OPENROUTER
+
+# Test API key directly
+curl -H "Authorization: Bearer YOUR_API_KEY" https://openrouter.ai/api/v1/models
 ```
 
 ### Performance Optimization
 
 **For faster embedding generation:**
-- Increase batch size: `--batch-size 200` (if you have enough memory)
-- Use GPU if available (requires CUDA-enabled Docker setup)
-- Pre-generate embeddings on a more powerful machine and transfer the `chunks_with_embeddings.csv` file
+- Use larger batch sizes: `--batch-size 200` (if you have sufficient memory)
+- Use a machine with more CPU cores and RAM
+- For production: Use GPU-enabled Docker setup with CUDA
 
 **For production deployment:**
-- Use external PostgreSQL with more memory
-- Implement connection pooling
-- Add Redis for caching frequently accessed chunks
+- Use external PostgreSQL with more memory and SSD storage
+- Implement Redis for caching frequently accessed chunks
+- Use a CDN for static assets
+- Enable gzip compression
+- Set up horizontal scaling with load balancers
+
+## 🔍 Legal Dataset Details
+
+The platform includes a comprehensive chunked Civil Code dataset:
+
+- **190,846 legal rules** with complete metadata and hierarchical structure
+- **413,453 text chunks** with optimized 800-character chunks and 500-character overlap
+- **BAAI/bge-m3 embeddings** (1024-dimensional) for high-quality semantic understanding
+- **Structured relationships** between rules and their constituent chunks
+- **Memory-optimized processing** with batch generation and streaming upload
+
+### Dataset Processing Pipeline
+1. **Rules Extraction**: Legal articles parsed from source documents with metadata
+2. **Text Chunking**: Rules split into overlapping chunks for comprehensive semantic coverage
+3. **Embedding Generation**: Each chunk encoded using BAAI/bge-m3 model with batch processing
+4. **Database Upload**: Rules and chunks stored with proper foreign key relationships and indexing
 
 ## 📊 MVP Implementation Status
 
 ### ✅ Completed and Ready
-- **Full Web Application** with complete UI workflow
-- **Document Upload & Analysis** with file processing pipeline
-- **Chunked Vector Database** with 413,000+ text chunks and embeddings
-- **Semantic Search** with configurable similarity functions on document level
-- **REST API** with comprehensive endpoints and Swagger documentation
-- **Docker Deployment** with full service orchestration
-- **Real-time Processing** with status updates and progress tracking
-- **Error Handling** with comprehensive validation and user feedback
-- **Unified Data Processing** with flexible embedding generation and upload
+- **🌐 Full Web Application** with complete UI workflow and responsive design
+- **📄 Document Upload & Analysis** with comprehensive file processing pipeline
+- **🗄️ Chunked Vector Database** with 413,000+ text chunks and embeddings
+- **🔍 Semantic Search** with configurable similarity functions and chunk-level precision
+- **🔗 REST API** with comprehensive endpoints and interactive Swagger documentation
+- **🐳 Docker Deployment** with full service orchestration and easy setup
+- **⚡ Real-time Processing** with status updates and progress tracking
+- **🛡️ Error Handling** with comprehensive validation and user feedback
+- **🔧 Unified Data Processing** with flexible embedding generation and upload scripts
+- **📈 Performance Optimization** with concurrent processing and retry mechanisms
+- **🌐 Web Deployment** via [SmartClause](http://82.202.138.178:8080/)
 
 ### 🎯 Future Enhancements
-- **User Management**: Authentication and personalized document history
-- **Advanced Analytics**: Legal precedent analysis and case law integration
-- **Deployment**: Production-ready configuration with monitoring and scaling
-- **Chat-based document management system**: Interactive legal consultation interface
+- **👤 User Management**: Authentication system and personalized document history
+- **💬 Chat Interface**: Interactive legal consultation with conversation history
 
 ## 🚀 Ready for Production
 
 This MVP provides a solid foundation for a legal tech platform with:
-- **Scalable Architecture**: Microservices ready for horizontal scaling
-- **Production APIs**: Comprehensive error handling and validation
-- **Legal Domain Expertise**: Purpose-built for Russian legal document analysis with chunk-level precision
-- **Modern Tech Stack**: Latest frameworks and AI integration patterns
-- **Docker Deployment**: Consistent environments across development and production
-- **Optimized Vector Search**: Chunk-based retrieval for improved relevance and performance
 
-**Start analyzing legal documents today!** Upload your first document at [http://localhost:8080](http://localhost:8080) after following the Quick Start guide.
+- **🏗️ Scalable Architecture**: Microservices ready for horizontal scaling and load balancing
+- **🔒 Production APIs**: Comprehensive error handling, validation, and security measures
+- **⚖️ Legal Domain Expertise**: Purpose-built for Russian legal document analysis with chunk-level precision
+- **🛠️ Modern Tech Stack**: Latest frameworks, AI integration patterns, and best practices
+- **🐳 Container Deployment**: Consistent environments across development, staging, and production
+- **🎯 Optimized Vector Search**: Chunk-based retrieval for improved relevance and performance
+- **📚 Comprehensive Documentation**: Complete setup guides, API docs, and troubleshooting
 
-For detailed analyzer-specific documentation, see [`analyzer/README.md`](analyzer/README.md).
+**🎉 Start analyzing legal documents today!** Upload your first document at [http://localhost:8080](http://localhost:8080) after following the Quick Start guide.
