@@ -54,13 +54,13 @@ def test_health_endpoint():
 
 
 def test_retrieve_endpoint():
-    """Test the retrieve endpoint with mock data"""
+    """Test the retrieve-chunk endpoint with mock data"""
     request_data = {
         "query": "contract termination",
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-json", json=request_data)
+    response = client.post("/api/v1/retrieve-chunk", json=request_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -79,14 +79,46 @@ def test_retrieve_endpoint():
 
 
 def test_retrieve_endpoint_validation():
-    """Test retrieve endpoint input validation"""
+    """Test retrieve-chunk endpoint input validation"""
     # Test empty query
-    response = client.post("/api/v1/retrieve-json", json={"query": "", "k": 5})
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5})
     assert response.status_code == 422
     
     # Test k too large
-    response = client.post("/api/v1/retrieve-json", json={"query": "test", "k": 50})
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50})
     assert response.status_code == 400
+
+
+def test_retrieve_rules_endpoint():
+    """Test the retrieve-rules endpoint with mock data"""
+    request_data = {
+        "query": "contract termination",
+        "k": 3
+    }
+    
+    response = client.post("/api/v1/retrieve-rules", json=request_data)
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "results" in data
+    assert "total_results" in data
+    assert "query" in data
+    assert data["query"] == request_data["query"]
+    assert len(data["results"]) <= request_data["k"]
+    
+    # Check structure of results
+    if data["results"]:
+        result = data["results"][0]
+        assert "text" in result
+        assert "embedding" in result
+        assert "metadata" in result
+        assert isinstance(result["embedding"], list)
+        
+        # Check metadata structure
+        metadata = result["metadata"]
+        assert "rule_title" in metadata
+        assert "rule_number" in metadata
+        assert "file_name" in metadata
 
 
 def test_analyze_endpoint():

@@ -74,4 +74,12 @@ class EmbedResponse(BaseModel):
     """Response schema for /embed endpoint"""
     text: str = Field(..., description="Original input text")
     embedding: List[float] = Field(..., description="Vector embedding of the text")
-    dimension: int = Field(..., description="Dimension of the embedding vector") 
+    dimension: int = Field(..., description="Dimension of the embedding vector")
+
+
+class RetrievalMetricsResponse(BaseModel):
+    """Response schema for retrieval metrics endpoint"""
+    total_variance: float = Field(..., description="Total variance across all embedding dimensions")
+    silhouette_score: float = Field(..., description="Silhouette score for document clusters")
+    eid: float = Field(..., description="Effective Intrinsic Dimensionality (EID)")
+    dr: float = Field(..., description="Dimensionality Redundancy (DR)") 
