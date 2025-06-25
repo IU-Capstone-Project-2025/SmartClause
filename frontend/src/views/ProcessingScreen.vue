@@ -1,13 +1,9 @@
 <template>
   <div class="processing-screen">
-    <div class="results-header">
-      <h2>Analysis Results</h2>
+    <div class="processing-header">
+      <h2>Analyzing your document</h2>
       <div class="file-info-bar">
         <span class="file-name">{{ fileName }}</span>
-        <div class="status">
-          <span class="status-dot"></span>
-          <span>Issues found: ...</span>
-        </div>
       </div>
     </div>
 
@@ -15,13 +11,13 @@
       <div class="processing-content">
         <p class="status-text">{{ statusText }}</p>
         <div class="progress-wrapper">
-            <p class="progress-label">Analyzing document and preparing recommendations</p>
-            <div class="progress-bar-container">
-                <div class="progress-bar" style="width: 100%"></div>
-            </div>
-            <p class="time-remaining">This may take a few moments</p>
+          <p class="progress-label">Analyzing document and preparing recommendations</p>
+          <div class="progress-bar-container">
+            <div class="progress-bar"></div>
+          </div>
+          <p class="time-remaining">This may take a few moments</p>
         </div>
-        <button class="cancel-button" @click="cancel">Cancel</button>
+        <!-- <button class="cancel-button" @click="cancel">Cancel</button> -->
       </div>
     </div>
   </div>
@@ -102,7 +98,7 @@ export default {
   font-family: 'Inter', sans-serif;
 }
 
-.results-header h2 {
+.processing-header h2 {
     font-size: 36px;
     font-weight: 700;
     margin-bottom: 30px;
@@ -120,19 +116,6 @@ export default {
 
 .file-name {
     font-weight: 500;
-}
-
-.status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.status-dot {
-    width: 10px;
-    height: 10px;
-    background-color: #e53e3e;
-    border-radius: 50%;
 }
 
 .processing-container {
@@ -178,19 +161,27 @@ export default {
   background-color: #2563eb;
   height: 100%;
   border-radius: 10px;
-  /* Make it an indeterminate progress bar */
-  animation: indeterminate 2s infinite linear;
+  width: 100%;
+  background-image: linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.2) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 40px 40px;
+  animation: progress-animation 2s linear infinite;
 }
 
-@keyframes indeterminate {
+@keyframes progress-animation {
   0% {
-    width: 0%;
-  }
-  50% {
-    width: 100%;
+    background-position: 40px 0;
   }
   100% {
-    width: 0%;
+    background-position: 0 0;
   }
 }
 

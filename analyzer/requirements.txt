@@ -35,3 +35,7 @@ tqdm>=4.64.0
 
 # Testing
 pytest>=7.4.3 
+
+rank_bm25
+pymorphy2
+stop-words
