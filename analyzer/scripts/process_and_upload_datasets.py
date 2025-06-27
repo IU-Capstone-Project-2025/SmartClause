@@ -304,7 +304,7 @@ def ensure_database_schema(conn):
     CREATE INDEX IF NOT EXISTS rules_file_idx ON rules (file);
     CREATE INDEX IF NOT EXISTS rule_chunks_rule_id_idx ON rule_chunks (rule_id);
     CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id, chunk_number);
-    CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING ivfflat (embedding vector_cosine_ops);
+    CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 8, ef_construction = 64);
     """
     
     try:

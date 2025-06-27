@@ -10,6 +10,7 @@ from ..schemas.requests import RetrieveRequest
 from ..schemas.responses import RetrieveResponse, RetrieveResult, DocumentMetadata
 from ..models.database import Rule, RuleChunk
 from .embedding_service import embedding_service
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,25 @@ class RetrievalService:
     
     def __init__(self, default_distance_function: DistanceFunction = DistanceFunction.COSINE):
         self.default_distance_function = default_distance_function
+    
+    def configure_hnsw_search_params(self, db: Session, ef_search: int = None):
+        """
+        Configure HNSW search parameters for optimal performance.
+        Based on benchmarking results: ef_search = 32 provides the best accuracy/speed tradeoff.
+        
+        Args:
+            db: Database session
+            ef_search: Controls the size of the dynamic candidate list (uses config default if None)
+        """
+        if ef_search is None:
+            ef_search = settings.hnsw_ef_search
+            
+        try:
+            db.execute(text(f"SET hnsw.ef_search = {ef_search}"))
+            logger.info(f"HNSW ef_search parameter set to {ef_search}")
+        except Exception as e:
+            logger.warning(f"Failed to set HNSW parameters: {e}")
+            # This is not critical, continue without custom parameters
     
     async def retrieve_rules(
         self,
@@ -53,6 +73,9 @@ class RetrievalService:
         logger.info(f"Retrieving {request.k} unique rules for query: '{request.query[:100]}...' using {distance_function.value}")
         
         try:
+            # Configure HNSW search parameters for optimal performance
+            self.configure_hnsw_search_params(db)
+            
             # Generate embedding for the query
             query_embedding = embedding_service.encode_to_list(request.query)
             
@@ -155,6 +178,9 @@ class RetrievalService:
         logger.info(f"Retrieving documents for query: '{request.query[:100]}...' using {distance_function.value}")
         
         try:
+            # Configure HNSW search parameters for optimal performance
+            self.configure_hnsw_search_params(db)
+            
             # Generate embedding for the query
             query_embedding = embedding_service.encode_to_list(request.query)
             
