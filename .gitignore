@@ -232,3 +232,6 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# Dataset files (downloaded via script from Hugging Face)
+analyzer/scripts/datasets/*.csv
