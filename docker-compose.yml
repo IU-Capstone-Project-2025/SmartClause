@@ -5,6 +5,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend
+      - backend_uploads:/app/uploads
     env_file:
       - ./analyzer/.env
     environment:
@@ -47,4 +48,5 @@ services:
       - analyzer
 
 volumes:
-  postgres_data: 
+  postgres_data:
+  backend_uploads: 
