@@ -149,7 +149,21 @@ def main():
     
     # Setup target directory
     script_dir = Path(__file__).parent
-    datasets_dir = script_dir / "datasets"
+    
+    # Prefer project root datasets directory (for Docker mounting)
+    project_root = script_dir.parent.parent
+    preferred_datasets_dir = project_root / "datasets"
+    local_datasets_dir = script_dir / "datasets"
+    
+    # Use project root datasets directory if we're likely in Docker context
+    # or if it already exists, otherwise use local directory
+    if preferred_datasets_dir.exists() or not local_datasets_dir.exists():
+        datasets_dir = preferred_datasets_dir
+        print(f"📁 Using project root datasets directory")
+    else:
+        datasets_dir = local_datasets_dir
+        print(f"📁 Using local datasets directory")
+    
     datasets_dir.mkdir(exist_ok=True)
     
     print("🚀 SmartClause Dataset Downloader")
