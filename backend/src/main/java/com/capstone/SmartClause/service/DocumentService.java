@@ -60,10 +60,41 @@ public class DocumentService {
             .collect(Collectors.toList());
     }
 
+    public List<DocumentDto.DocumentListItem> getDocumentsBySpaceId(UUID spaceId, String userId) {
+        logger.info("Fetching documents for space: {} and user: {}", spaceId, userId);
+        
+        // Use repository method that filters by both space and user
+        List<Document> documents = documentRepository.findBySpaceIdAndUserIdOrderByUploadedAtDesc(spaceId, userId);
+        
+        return documents.stream()
+            .map(this::convertToDocumentListItem)
+            .collect(Collectors.toList());
+    }
+
     public Optional<DocumentDto.DocumentDetailResponse> getDocumentById(UUID documentId) {
         logger.info("Fetching document details for ID: {}", documentId);
         
         Optional<Document> documentOpt = documentRepository.findById(documentId);
+        if (documentOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Document document = documentOpt.get();
+        DocumentDto.DocumentDetailResponse response = new DocumentDto.DocumentDetailResponse();
+        response.setId(document.getId().toString());
+        response.setName(document.getName());
+        response.setContent(document.getContent());
+        
+        // Analysis data is available via separate endpoint: GET /api/documents/{id}/analysis
+
+        return Optional.of(response);
+    }
+
+    public Optional<DocumentDto.DocumentDetailResponse> getDocumentById(UUID documentId, String userId) {
+        logger.info("Fetching document details for ID: {} and user: {}", documentId, userId);
+        
+        // First verify the document belongs to the user
+        Optional<Document> documentOpt = documentRepository.findByIdAndUserId(documentId, userId);
         if (documentOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -115,6 +146,9 @@ public class DocumentService {
         document.setStatus(Document.DocumentStatus.UPLOADING);
         document.setUserId(userId);
         
+        // Store the file content as bytes
+        document.setContent(file.getBytes());
+        
         // Set space relationship
         document.setSpace(new com.capstone.SmartClause.model.Space());
         document.getSpace().setId(spaceId);
@@ -132,6 +166,24 @@ public class DocumentService {
         logger.info("Fetching analysis for document: {}", documentId);
         
         Optional<Document> documentOpt = documentRepository.findById(documentId);
+        if (documentOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Document document = documentOpt.get();
+        if (document.getAnalysisDocumentId() == null) {
+            return Optional.empty();
+        }
+
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        return analysisOpt.map(AnalysisResult::getAnalysisPoints);
+    }
+
+    public Optional<Map<String, Object>> getDocumentAnalysis(UUID documentId, String userId) {
+        logger.info("Fetching analysis for document: {} and user: {}", documentId, userId);
+        
+        // First verify the document belongs to the user
+        Optional<Document> documentOpt = documentRepository.findByIdAndUserId(documentId, userId);
         if (documentOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -192,9 +244,16 @@ public class DocumentService {
     }
 
     public String reanalyzeDocument(UUID documentId) {
-        logger.info("Starting reanalysis for document: {}", documentId);
+        return reanalyzeDocument(documentId, null);
+    }
+
+    public String reanalyzeDocument(UUID documentId, String userId) {
+        logger.info("Starting reanalysis for document: {} for user: {}", documentId, userId);
         
-        Optional<Document> documentOpt = documentRepository.findById(documentId);
+        Optional<Document> documentOpt = userId != null 
+            ? documentRepository.findByIdAndUserId(documentId, userId)
+            : documentRepository.findById(documentId);
+            
         if (documentOpt.isEmpty()) {
             throw new IllegalArgumentException("Document not found");
         }
@@ -228,10 +287,6 @@ public class DocumentService {
             String analysisDocumentId = UUID.randomUUID().toString();
             document.setAnalysisDocumentId(analysisDocumentId);
             documentRepository.save(document);
-
-            // Set content as file metadata instead of trying to read binary files
-            String content = generateFileMetadata(document);
-            document.setContent(content);
 
             // Call analyzer microservice asynchronously
             analyzeDocumentAsync(document, analysisDocumentId);
@@ -300,129 +355,6 @@ public class DocumentService {
             
         } catch (Exception e) {
             logger.error("Failed to save analysis results for document ID: {}", analysisDocumentId, e);
-        }
-    }
-
-    private String generateFileMetadata(Document document) {
-        try {
-            Path filePath = Paths.get(document.getFilePath());
-            long fileSizeBytes = Files.size(filePath);
-            String fileSize = formatFileSize(fileSizeBytes);
-            
-            StringBuilder metadata = new StringBuilder();
-            metadata.append("File: ").append(document.getOriginalFilename()).append("\n");
-            metadata.append("Type: ").append(document.getContentType() != null ? document.getContentType() : "Unknown").append("\n");
-            metadata.append("Size: ").append(fileSize).append("\n");
-            metadata.append("Status: ").append(document.getStatus().name()).append("\n");
-            metadata.append("Uploaded: ").append(document.getUploadedAt()).append("\n");
-            
-            // Only show text content for small text files
-            if (isTextFile(document) && fileSizeBytes < 10240) { // Less than 10KB
-                try {
-                    String textContent = Files.readString(filePath);
-                    if (textContent.length() > 500) {
-                        textContent = textContent.substring(0, 500) + "...";
-                    }
-                    metadata.append("\nPreview:\n").append(textContent);
-                } catch (Exception e) {
-                    metadata.append("\nPreview: [Could not read as text]");
-                }
-            } else {
-                metadata.append("\nPreview: [Binary file - ").append(fileSize).append("]");
-            }
-            
-            return metadata.toString();
-        } catch (Exception e) {
-            logger.warn("Failed to generate file metadata for: {}", document.getFilePath(), e);
-            return "File metadata unavailable: " + e.getMessage();
-        }
-    }
-
-    private String formatFileSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
-    }
-
-    private boolean isTextFile(Document document) {
-        String contentType = document.getContentType();
-        String filename = document.getOriginalFilename().toLowerCase();
-        
-        return (contentType != null && contentType.startsWith("text/")) ||
-               filename.endsWith(".txt") || filename.endsWith(".md") || 
-               filename.endsWith(".json") || filename.endsWith(".xml") ||
-               filename.endsWith(".csv") || filename.endsWith(".log");
-    }
-
-    private String extractTextContent(Document document) {
-        try {
-            Path filePath = Paths.get(document.getFilePath());
-            String contentType = document.getContentType();
-            
-            // Handle different file types
-            if (contentType != null) {
-                if (contentType.startsWith("text/")) {
-                    // Text files - read as UTF-8
-                    return Files.readString(filePath);
-                } else if (contentType.equals("application/pdf")) {
-                    // PDF files - would need PDF text extraction library
-                    logger.info("PDF file detected: {}. Text extraction not implemented yet.", document.getName());
-                    return "[PDF file - text extraction not implemented]";
-                } else if (contentType.startsWith("application/vnd.openxmlformats-officedocument")) {
-                    // Office documents (Word, Excel, etc.)
-                    logger.info("Office document detected: {}. Text extraction not implemented yet.", document.getName());
-                    return "[Office document - text extraction not implemented]";
-                } else if (contentType.startsWith("image/")) {
-                    // Image files
-                    logger.info("Image file detected: {}. OCR not implemented yet.", document.getName());
-                    return "[Image file - OCR not implemented]";
-                } else {
-                    // Binary files - try to read as text but handle encoding issues
-                    logger.info("Binary file detected: {}. Attempting basic text extraction.", document.getName());
-                    return tryReadAsText(filePath);
-                }
-            } else {
-                // Unknown content type - try to detect by extension
-                String filename = document.getOriginalFilename().toLowerCase();
-                if (filename.endsWith(".txt") || filename.endsWith(".md") || filename.endsWith(".json") || filename.endsWith(".xml")) {
-                    return Files.readString(filePath);
-                } else {
-                    logger.info("Unknown file type: {}. Skipping text extraction.", document.getName());
-                    return "[Binary file - content not extracted]";
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to extract text content from file: {}", document.getFilePath(), e);
-            return "[Content extraction failed: " + e.getMessage() + "]";
-        }
-    }
-
-    private String tryReadAsText(Path filePath) {
-        try {
-            // Try reading first few bytes to see if it's text
-            byte[] bytes = Files.readAllBytes(filePath);
-            if (bytes.length == 0) {
-                return "[Empty file]";
-            }
-            
-            // Check if file is likely text (simple heuristic)
-            int textBytes = 0;
-            int sampleSize = Math.min(1000, bytes.length);
-            for (int i = 0; i < sampleSize; i++) {
-                byte b = bytes[i];
-                if ((b >= 32 && b <= 126) || b == 9 || b == 10 || b == 13) { // printable ASCII + tab/newline
-                    textBytes++;
-                }
-            }
-            
-            if (textBytes > sampleSize * 0.8) { // If 80%+ is text-like
-                return new String(bytes, "UTF-8");
-            } else {
-                return String.format("[Binary file: %d bytes]", bytes.length);
-            }
-        } catch (Exception e) {
-            return "[Failed to read file: " + e.getMessage() + "]";
         }
     }
 

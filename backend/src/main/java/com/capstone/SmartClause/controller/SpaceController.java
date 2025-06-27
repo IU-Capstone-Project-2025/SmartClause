@@ -2,6 +2,7 @@ package com.capstone.SmartClause.controller;
 
 import com.capstone.SmartClause.model.dto.SpaceDto;
 import com.capstone.SmartClause.service.SpaceService;
+import com.capstone.SmartClause.util.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,9 @@ public class SpaceController {
 
     @Autowired
     private SpaceService spaceService;
+    
+    @Autowired
+    private AuthUtils authUtils;
 
     @Operation(summary = "Get all user spaces", description = "Retrieves all spaces for the authenticated user")
     @ApiResponses(value = {
@@ -35,19 +39,27 @@ public class SpaceController {
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = SpaceDto.SpaceListResponse.class)))
     })
     @GetMapping
-    public ResponseEntity<SpaceDto.SpaceListResponse> getAllSpaces(
+    public ResponseEntity<?> getAllSpaces(
             @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
-            // TODO: Extract user ID from authorization token when auth is implemented
-            List<SpaceDto.SpaceListItem> spaces = spaceService.getAllSpaces();
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            // Get user-specific spaces
+            List<SpaceDto.SpaceListItem> spaces = spaceService.getSpacesByUser(userId);
             
             SpaceDto.SpaceListResponse response = new SpaceDto.SpaceListResponse();
             response.setSpaces(spaces);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to retrieve spaces"));
         }
     }
 
@@ -69,8 +81,14 @@ public class SpaceController {
                     .body(Map.of("error", "Space name is required"));
             }
 
-            // TODO: Extract user ID from authorization token when auth is implemented
-            SpaceDto.SpaceResponse space = spaceService.createSpace(request);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            SpaceDto.SpaceResponse space = spaceService.createSpace(request, userId);
             
             return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("space", space));
@@ -98,8 +116,14 @@ public class SpaceController {
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            Optional<SpaceDto.SpaceDetailResponse> spaceOpt = spaceService.getSpaceById(spaceUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            Optional<SpaceDto.SpaceDetailResponse> spaceOpt = spaceService.getSpaceByIdAndUser(spaceUuid, userId);
             
             if (spaceOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -132,8 +156,14 @@ public class SpaceController {
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            Optional<SpaceDto.SpaceResponse> updatedSpaceOpt = spaceService.updateSpace(spaceUuid, request);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            Optional<SpaceDto.SpaceResponse> updatedSpaceOpt = spaceService.updateSpace(spaceUuid, request, userId);
             
             if (updatedSpaceOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -164,8 +194,14 @@ public class SpaceController {
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            boolean deleted = spaceService.deleteSpace(spaceUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            boolean deleted = spaceService.deleteSpace(spaceUuid, userId);
             
             if (!deleted) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)

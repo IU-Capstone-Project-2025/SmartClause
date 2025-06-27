@@ -50,6 +50,6 @@ public class DocumentDto {
     public static class DocumentDetailResponse {
         private String id;
         private String name;
-        private String content;
+        private byte[] content;
     }
 } 

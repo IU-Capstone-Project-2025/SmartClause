@@ -2,6 +2,7 @@ package com.capstone.SmartClause.controller;
 
 import com.capstone.SmartClause.model.dto.DocumentDto;
 import com.capstone.SmartClause.service.DocumentService;
+import com.capstone.SmartClause.util.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,9 @@ public class DocumentController {
 
     @Autowired
     private DocumentService documentService;
+    
+    @Autowired
+    private AuthUtils authUtils;
 
     @Operation(summary = "Upload document to space", description = "Uploads a document file to a specific space")
     @ApiResponses(value = {
@@ -56,8 +60,14 @@ public class DocumentController {
                     .body(Map.of("error", "File cannot be empty"));
             }
 
-            // TODO: Extract user ID from authorization token when auth is implemented
-            DocumentDto.DocumentUploadResponse document = documentService.uploadDocument(spaceUuid, file, name, null);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            DocumentDto.DocumentUploadResponse document = documentService.uploadDocument(spaceUuid, file, name, userId);
             
             return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("document", document));
@@ -83,8 +93,14 @@ public class DocumentController {
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            List<DocumentDto.DocumentListItem> documents = documentService.getDocumentsBySpaceId(spaceUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            List<DocumentDto.DocumentListItem> documents = documentService.getDocumentsBySpaceId(spaceUuid, userId);
             
             DocumentDto.DocumentListResponse response = new DocumentDto.DocumentListResponse();
             response.setDocuments(documents);
@@ -114,8 +130,14 @@ public class DocumentController {
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            Optional<DocumentDto.DocumentDetailResponse> documentOpt = documentService.getDocumentById(documentUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            Optional<DocumentDto.DocumentDetailResponse> documentOpt = documentService.getDocumentById(documentUuid, userId);
             
             if (documentOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -146,8 +168,14 @@ public class DocumentController {
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            boolean deleted = documentService.deleteDocument(documentUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            boolean deleted = documentService.deleteDocument(documentUuid, userId);
             
             if (!deleted) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -179,8 +207,14 @@ public class DocumentController {
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            Optional<Map<String, Object>> analysisOpt = documentService.getDocumentAnalysis(documentUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            Optional<Map<String, Object>> analysisOpt = documentService.getDocumentAnalysis(documentUuid, userId);
             
             if (analysisOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -213,8 +247,14 @@ public class DocumentController {
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // TODO: Extract user ID from authorization token when auth is implemented
-            String analysisId = documentService.reanalyzeDocument(documentUuid);
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            String analysisId = documentService.reanalyzeDocument(documentUuid, userId);
             
             return ResponseEntity.accepted()
                 .body(Map.of(

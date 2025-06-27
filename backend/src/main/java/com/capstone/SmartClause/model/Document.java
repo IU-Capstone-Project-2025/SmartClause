@@ -61,8 +61,9 @@ public class Document {
     @Column(name = "analysis_document_id", length = 255)
     private String analysisDocumentId;
     
-    @Column(columnDefinition = "TEXT")
-    private String content;
+    @Lob
+    @Column(name = "content")
+    private byte[] content;
     
     public enum DocumentStatus {
         UPLOADING, PROCESSING, COMPLETED, ERROR
