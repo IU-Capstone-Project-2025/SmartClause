@@ -97,6 +97,9 @@ docker-compose logs -f
 ```bash
 # Load the complete legal dataset (413k+ chunks with embeddings)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
+
+# For systems with limited RAM, use smaller chunk sizes:
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --csv-chunk-size 50
 ```
 
 **Option B: Generate Embeddings from Scratch**
@@ -157,7 +160,7 @@ The optimized database structure separates rules metadata from searchable chunks
 
 ## 📁 Dataset Files
 
-The system uses datasets downloaded from [Hugging Face Hub](https://huggingface.co/datasets/narly/russian-codexes-bge-m3) and stored in `analyzer/scripts/datasets/`:
+The system uses datasets downloaded from [Hugging Face Hub](https://huggingface.co/datasets/narly/russian-codexes-bge-m3) and stored in the project root `datasets/` directory:
 
 - **`rules_dataset.csv`**: Complete legal rules metadata (190,846 rules)
 - **`chunks_dataset.csv`**: Text chunks for embedding (413,453 chunks)  
@@ -289,7 +292,7 @@ docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upl
 python analyzer/scripts/download_datasets.py --force
 
 # Check if datasets exist and verify sizes
-ls -lh analyzer/scripts/datasets/
+ls -lh datasets/
 
 # The script will show actual file sizes when run
 # Sizes are automatically detected from remote files
@@ -303,10 +306,14 @@ curl -I https://huggingface.co/datasets/narly/russian-codexes-bge-m3/resolve/mai
 # Use smaller batch sizes
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 10
 
-# Monitor memory usage
+# Monitor memory usage during upload
 docker stats
 
-# For low-memory systems, generate embeddings externally and transfer the file
+# For very low-memory systems, use even smaller settings
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --csv-chunk-size 250 --batch-size 25
+
+# For embedding generation on low-memory systems, use smaller batch sizes
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 10
 ```
 
 #### Database Connection Issues
@@ -342,13 +349,13 @@ docker-compose up -d
 #### Missing Dataset Files
 ```bash
 # Verify dataset files exist
-docker-compose exec analyzer ls -la scripts/datasets/
+ls -la datasets/
 
 # If files are missing, download them:
 python analyzer/scripts/download_datasets.py
 
 # Verify download completed successfully
-ls -lh analyzer/scripts/datasets/chunks_with_embeddings.csv
+ls -lh datasets/chunks_with_embeddings.csv
 
 # Should show the embeddings file with substantial size
 ```
