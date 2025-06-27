@@ -234,4 +234,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # Dataset files (downloaded via script from Hugging Face)
-analyzer/scripts/datasets/*.csv
+datasets/*.csv
