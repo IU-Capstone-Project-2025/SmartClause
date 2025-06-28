@@ -38,35 +38,33 @@
 
 ### Prerequisites
 - **Docker and Docker Compose** (required)
-- **Git LFS** (required for dataset files)
-- **OpenRouter API Key** ([Get one here](https://openrouter.ai/)) - ask team leader for access
+- **Python 3.8+** (for dataset download script)
+- **OpenRouter API Key** ([Get one here](https://openrouter.ai/))
+- **Internet Connection** (for downloading datasets from Hugging Face)
 
-### 1. Install Git LFS and Clone Repository
-
-**⚠️ Important: Install Git LFS before cloning to ensure dataset files download properly.**
+### 1. Clone Repository
 
 ```bash
-# Install Git LFS (if not already installed)
-# macOS:
-brew install git-lfs
-
-# Ubuntu/Debian:
-sudo apt install git-lfs
-
-# Windows: Download from https://git-lfs.github.io/
-
-# Initialize Git LFS
-git lfs install
-
-# Clone the repository (LFS will automatically download large files)
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/your-username/SmartClause.git
 cd SmartClause
-
-# Verify dataset files were downloaded (should show ~500MB+ file)
-ls -lh analyzer/scripts/datasets/chunks_with_embeddings.csv
 ```
 
-### 2. Configure Environment
+### 2. Download Required Datasets
+```bash
+# Download datasets from Hugging Face Hub (~1.2GB total)
+python analyzer/scripts/download_datasets.py
+
+# Or force re-download if files exist
+python analyzer/scripts/download_datasets.py --force
+```
+
+**📊 Dataset Information:**
+- **Source:** [Hugging Face Hub - narly/russian-codexes-bge-m3](https://huggingface.co/datasets/narly/russian-codexes-bge-m3)
+- **Content:** Russian legal codes with BGE-M3 embeddings
+- **Size:** Download script automatically detects current file sizes
+
+### 3. Configure Environment
 
 ```bash
 # Copy environment template
@@ -81,7 +79,7 @@ cp analyzer/env.example analyzer/.env
 OPENROUTER_API_KEY=your_actual_api_key_here
 ```
 
-### 3. Launch the Platform
+### 4. Launch the Platform
 
 ```bash
 # Build and start all services (first launch may take 10-15 minutes)
@@ -93,12 +91,15 @@ docker-compose logs -f
 
 **Note**: The first launch will download the BAAI/bge-m3 model (~2GB) and may take some time.
 
-### 4. Initialize Database and Load Legal Dataset
+### 5. Initialize Database and Load Legal Dataset
 
 **Option A: Quick Setup (Recommended)**
 ```bash
 # Load the complete legal dataset (413k+ chunks with embeddings)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
+
+# For systems with limited RAM, use smaller chunk sizes:
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --csv-chunk-size 50
 ```
 
 **Option B: Generate Embeddings from Scratch**
@@ -111,7 +112,7 @@ docker-compose exec analyzer python scripts/process_and_upload_datasets.py --gen
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
 ```
 
-### 5. Access the Application
+### 6. Access the Application
 
 Once setup is complete, access these URLs:
 
@@ -159,13 +160,21 @@ The optimized database structure separates rules metadata from searchable chunks
 
 ## 📁 Dataset Files
 
-The system uses datasets located in `analyzer/scripts/datasets/`:
+The system uses datasets downloaded from [Hugging Face Hub](https://huggingface.co/datasets/narly/russian-codexes-bge-m3) and stored in the project root `datasets/` directory:
 
-- **`rules_dataset.csv`**: Complete legal rules metadata (33MB, 190,846 rules)
-- **`chunks_dataset.csv`**: Text chunks for embedding (65MB, 413,453 chunks)
-- **`chunks_with_embeddings.csv`**: Pre-generated embeddings file (~500MB, Git LFS)
+- **`rules_dataset.csv`**: Complete legal rules metadata (190,846 rules)
+- **`chunks_dataset.csv`**: Text chunks for embedding (413,453 chunks)  
+- **`chunks_with_embeddings.csv`**: Pre-generated BGE-M3 embeddings (413,453 vectors)
 
-**Git LFS Files**: The embeddings file is stored using Git LFS due to its size. Ensure Git LFS is installed before cloning.
+**🚀 Easy Download**: Files are automatically downloaded using the provided script:
+```bash
+python analyzer/scripts/download_datasets.py
+```
+
+**📊 Dataset Details:**
+- **Source Repository**: [narly/russian-codexes-bge-m3](https://huggingface.co/datasets/narly/russian-codexes-bge-m3)
+- **Embedding Model**: BAAI/bge-m3 (1024 dimensions)
+- **Content**: Russian Civil Codes parsed and chunked for semantic search
 
 ## 📚 API Documentation
 
@@ -277,21 +286,19 @@ docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upl
 
 ### Common Issues
 
-#### Git LFS Problems
+#### Dataset Download Problems
 ```bash
-# Verify LFS installation
-git lfs version
+# Re-download all datasets
+python analyzer/scripts/download_datasets.py --force
 
-# Check if LFS files were downloaded
-git lfs ls-files
-ls -lh analyzer/scripts/datasets/chunks_with_embeddings.csv
+# Check if datasets exist and verify sizes
+ls -lh datasets/
 
-# Re-download LFS files if needed
-git lfs pull
+# The script will show actual file sizes when run
+# Sizes are automatically detected from remote files
 
-# If embeddings file is missing or small, re-download:
-git lfs fetch
-git lfs checkout
+# If download fails, check internet connection and try again
+curl -I https://huggingface.co/datasets/narly/russian-codexes-bge-m3/resolve/main/rules_dataset.csv
 ```
 
 #### Memory Issues During Embedding Generation
@@ -299,10 +306,14 @@ git lfs checkout
 # Use smaller batch sizes
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 10
 
-# Monitor memory usage
+# Monitor memory usage during upload
 docker stats
 
-# For low-memory systems, generate embeddings externally and transfer the file
+# For very low-memory systems, use even smaller settings
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --csv-chunk-size 250 --batch-size 25
+
+# For embedding generation on low-memory systems, use smaller batch sizes
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 10
 ```
 
 #### Database Connection Issues
@@ -338,14 +349,15 @@ docker-compose up -d
 #### Missing Dataset Files
 ```bash
 # Verify dataset files exist
-docker-compose exec analyzer ls -la scripts/datasets/
+ls -la datasets/
 
-# If files are missing, check original locations:
-ls -la parser/dataset/dataset_codes_rf.csv
-ls -la experiments/dataset_codes_rf_chunking_800chunksize_500overlap.csv
+# If files are missing, download them:
+python analyzer/scripts/download_datasets.py
 
-# Copy files manually if needed
-docker cp parser/dataset/dataset_codes_rf.csv $(docker-compose ps -q analyzer):/app/scripts/datasets/rules_dataset.csv
+# Verify download completed successfully
+ls -lh datasets/chunks_with_embeddings.csv
+
+# Should show the embeddings file with substantial size
 ```
 
 #### API Key Issues
