@@ -40,8 +40,9 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes for efficient similarity search on embeddings
-CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING ivfflat (embedding vector_cosine_ops);
+-- Indexes for efficient similarity search on embeddings using HNSW
+-- Parameters based on benchmarking: m=8, ef_construction=64 for optimal accuracy/speed tradeoff (based on experiments/indexing.ipynb experement)
+CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 8, ef_construction = 64);
 
 -- Indexes for efficient lookups
 CREATE INDEX IF NOT EXISTS rules_rule_number_idx ON rules (rule_number);

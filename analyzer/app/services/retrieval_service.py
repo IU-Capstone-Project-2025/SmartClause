@@ -1,10 +1,8 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
-import numpy as np
-import pymorphy2
 
 from ..schemas.requests import RetrieveRequest
 from ..schemas.responses import RetrieveResponse, RetrieveResult, DocumentMetadata
