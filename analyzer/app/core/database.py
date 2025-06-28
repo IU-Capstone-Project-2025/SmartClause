@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import create_engine, MetaData, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
@@ -24,6 +24,15 @@ Base = declarative_base()
 def get_db():
     db = SessionLocal()
     try:
+        # Configure HNSW search parameters once per session for optimal performance
+        # Based on benchmarking results: ef_search = 32 provides the best accuracy/speed tradeoff
+        try:
+            db.execute(text(f"SET hnsw.ef_search = {settings.hnsw_ef_search}"))
+            logger.debug(f"HNSW ef_search parameter set to {settings.hnsw_ef_search}")
+        except Exception as e:
+            logger.warning(f"Failed to set HNSW parameters: {e}")
+            # This is not critical, continue without custom parameters
+        
         yield db
     except Exception as e:
         logger.error(f"Database session error: {e}")

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Embedding settings
     embedding_model: str = "BAAI/bge-m3"
     embedding_dimension: int = 1024
+    
+    # HNSW Index settings (based on benchmarking results)
+    hnsw_ef_search: int = 32  # Runtime search parameter for optimal accuracy/speed tradeoff  (based on experiments/indexing.ipynb experement)
 
     # File size settings
     max_file_size: int = 10 * 1024 * 1024  # 10MB

@@ -8,7 +8,7 @@ This script handles:
 3. Optionally generating embeddings for chunks
 4. Uploading both rules and chunks with embeddings to database
 
-Expected file naming convention in script/datasets directory:
+Expected file naming convention in project root datasets/ directory:
 - datasets/rules_dataset.csv (or dataset_codes_rf.csv)
 - datasets/chunks_dataset.csv (or dataset_codes_rf_chunking_800chunksize_500overlap.csv)
 - datasets/chunks_with_embeddings.csv (generated output with embeddings)
@@ -89,12 +89,18 @@ def connect_to_database(config):
 def find_dataset_files(script_dir):
     """Find and validate dataset files in the script directory and datasets subdirectory."""
     files = {}
-    datasets_dir = script_dir / "datasets"
+    local_datasets_dir = script_dir / "datasets"
+    
+    # Also check project root datasets directory (for Docker mounting)
+    project_root = script_dir.parent.parent
+    root_datasets_dir = project_root / "datasets"
     
     # Look for rules dataset
     rules_candidates = [
-        datasets_dir / "rules_dataset.csv",
-        datasets_dir / "dataset_codes_rf.csv",
+        root_datasets_dir / "rules_dataset.csv",
+        root_datasets_dir / "dataset_codes_rf.csv",
+        local_datasets_dir / "rules_dataset.csv",
+        local_datasets_dir / "dataset_codes_rf.csv",
         script_dir / "rules_dataset.csv",
         script_dir / "dataset_codes_rf.csv"
     ]
@@ -106,8 +112,10 @@ def find_dataset_files(script_dir):
     
     # Look for chunks dataset  
     chunks_candidates = [
-        datasets_dir / "chunks_dataset.csv",
-        datasets_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv",
+        root_datasets_dir / "chunks_dataset.csv",
+        root_datasets_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv",
+        local_datasets_dir / "chunks_dataset.csv",
+        local_datasets_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv",
         script_dir / "chunks_dataset.csv",
         script_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv"
     ]
@@ -117,9 +125,11 @@ def find_dataset_files(script_dir):
             files['chunks'] = candidate
             break
     
-    # Set output file for embeddings (prefer datasets directory)
-    if datasets_dir.exists():
-        files['embeddings_output'] = datasets_dir / "chunks_with_embeddings.csv"
+    # Set output file for embeddings (prefer project root datasets directory)
+    if root_datasets_dir.exists():
+        files['embeddings_output'] = root_datasets_dir / "chunks_with_embeddings.csv"
+    elif local_datasets_dir.exists():
+        files['embeddings_output'] = local_datasets_dir / "chunks_with_embeddings.csv"
     else:
         files['embeddings_output'] = script_dir / "chunks_with_embeddings.csv"
     
@@ -304,7 +314,7 @@ def ensure_database_schema(conn):
     CREATE INDEX IF NOT EXISTS rules_file_idx ON rules (file);
     CREATE INDEX IF NOT EXISTS rule_chunks_rule_id_idx ON rule_chunks (rule_id);
     CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id, chunk_number);
-    CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING ivfflat (embedding vector_cosine_ops);
+    CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 8, ef_construction = 64);
     """
     
     try:
@@ -446,6 +456,100 @@ def upload_chunks(conn, chunks_df, batch_size=100):
         conn.rollback()
         return False
 
+def upload_chunks_streaming(conn, embeddings_file, batch_size=100, csv_chunk_size=1000):
+    """
+    Memory-efficient streaming upload of chunks with embeddings.
+    Reads and processes CSV file in chunks to minimize memory usage.
+    """
+    print(f"\n📤 Streaming upload from {embeddings_file}")
+    
+    insert_sql = """
+    INSERT INTO rule_chunks (
+        chunk_id, rule_id, chunk_number, chunk_text, 
+        chunk_char_start, chunk_char_end, embedding
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s
+    );
+    """
+    
+    try:
+        import gc
+        
+        print(f"🔧 Using CSV chunk size: {csv_chunk_size} rows")
+        print(f"🔧 Database batch size: {batch_size} rows")
+        
+        total_uploaded = 0
+        failed_embeddings = 0
+        chunk_count = 0
+        
+        # Stream the CSV file in chunks
+        csv_reader = pd.read_csv(embeddings_file, chunksize=csv_chunk_size)
+        
+        with conn.cursor() as cur:
+            for chunk_df in csv_reader:
+                chunk_count += 1
+                print(f"📦 Processing CSV chunk {chunk_count} ({len(chunk_df)} rows)...")
+                
+                # Process this chunk
+                batch_data = []
+                
+                for _, row in chunk_df.iterrows():
+                    # Convert embedding
+                    embedding = None
+                    if 'embedding' in row and pd.notna(row['embedding']):
+                        try:
+                            embedding_list = json.loads(row['embedding'])
+                            embedding = embedding_list
+                        except:
+                            failed_embeddings += 1
+                    else:
+                        failed_embeddings += 1
+                    
+                    chunk_data = (
+                        int(row['chunk_id']),
+                        int(row['rule_id']),
+                        int(row['chunk_number']) if pd.notna(row['chunk_number']) else None,
+                        str(row['chunk_text']) if pd.notna(row['chunk_text']) else None,
+                        int(row['chunk_char_start']) if pd.notna(row['chunk_char_start']) else None,
+                        int(row['chunk_char_end']) if pd.notna(row['chunk_char_end']) else None,
+                        embedding
+                    )
+                    batch_data.append(chunk_data)
+                    
+                    # Upload in smaller batches to avoid memory buildup
+                    if len(batch_data) >= batch_size:
+                        execute_batch(cur, insert_sql, batch_data, page_size=batch_size)
+                        conn.commit()
+                        total_uploaded += len(batch_data)
+                        batch_data = []
+                        
+                        # Force garbage collection
+                        gc.collect()
+                
+                # Upload remaining data in this chunk
+                if batch_data:
+                    execute_batch(cur, insert_sql, batch_data, page_size=len(batch_data))
+                    conn.commit()
+                    total_uploaded += len(batch_data)
+                
+                # Clear chunk from memory and force garbage collection
+                del chunk_df
+                del batch_data
+                gc.collect()
+                
+                print(f"✓ Completed CSV chunk {chunk_count} (total uploaded: {total_uploaded})")
+        
+        valid_embeddings = total_uploaded - failed_embeddings
+        print(f"✓ Successfully uploaded {total_uploaded} chunks via streaming")
+        print(f"  - {valid_embeddings} with valid embeddings")
+        print(f"  - {failed_embeddings} without embeddings")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error during streaming upload: {e}")
+        conn.rollback()
+        return False
+
 def verify_upload(conn):
     """Verify the upload was successful."""
     try:
@@ -493,14 +597,17 @@ def main():
         description="Process and upload legal rules and chunks datasets with optional embedding generation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-File naming conventions in script/datasets directory:
+File naming conventions in project root datasets/ directory:
   datasets/rules_dataset.csv (or dataset_codes_rf.csv) - Rules dataset
   datasets/chunks_dataset.csv (or dataset_codes_rf_chunking_800chunksize_500overlap.csv) - Chunks dataset  
   datasets/chunks_with_embeddings.csv - Output file with embeddings (generated)
 
 Examples:
-  # Load existing embeddings and upload
+  # Load existing embeddings and upload (default streaming)
   python process_and_upload_datasets.py --upload
+  
+  # Upload with smaller memory usage (for 3GB RAM constraint)
+  python process_and_upload_datasets.py --upload --clear --csv-chunk-size 500 --batch-size 50
   
   # Generate new embeddings and upload
   python process_and_upload_datasets.py --generate --upload --clear
@@ -518,6 +625,12 @@ Examples:
                        help="Clear existing database data before upload")
     parser.add_argument("--batch-size", type=int, default=100, 
                        help="Batch size for database operations")
+    parser.add_argument("--csv-chunk-size", type=int, default=1000,
+                       help="Number of rows to read from CSV at once (default: 1000)")
+    parser.add_argument("--stream", action="store_true", default=True,
+                       help="Use memory-efficient streaming upload (default: True)")
+    parser.add_argument("--no-stream", action="store_true",
+                       help="Disable streaming and load all data into memory")
     parser.add_argument("--no-confirm", action="store_true", 
                        help="Skip confirmation prompts")
     
@@ -544,24 +657,24 @@ Examples:
             return 1
         
         # Handle embeddings
-        chunks_with_embeddings = None
-        
         if args.generate:
             # Generate new embeddings
             chunks_with_embeddings = generate_embeddings(chunks_df, files['embeddings_output'])
             if chunks_with_embeddings is None:
                 return 1
         elif args.upload:
-            # Check if embeddings file exists
-            if files['embeddings_output'].exists():
-                chunks_with_embeddings = load_embeddings(files['embeddings_output'])
-                if chunks_with_embeddings is None:
-                    print("❌ Failed to load embeddings. Use --generate to create them.")
-                    return 1
-            else:
-                print(f"⚠ No embeddings file found at {files['embeddings_output']}")
-                print("Using chunks without embeddings or use --generate flag")
-                chunks_with_embeddings = chunks_df.copy()
+            # For upload, we don't need to load the embeddings into memory
+            # We'll stream directly from the CSV file
+            if not files['embeddings_output'].exists():
+                print(f"❌ No embeddings file found at {files['embeddings_output']}")
+                print("Use --generate flag to create embeddings first")
+                return 1
+            
+            print(f"✓ Found embeddings file: {files['embeddings_output']}")
+            # Clear chunks_df from memory since we'll stream from file
+            del chunks_df
+            import gc
+            gc.collect()
         
         # Upload to database if requested
         if args.upload:
@@ -588,9 +701,20 @@ Examples:
                 if not upload_rules(conn, rules_df, args.batch_size):
                     return 1
                 
-                # Upload chunks
-                if not upload_chunks(conn, chunks_with_embeddings, args.batch_size):
-                    return 1
+                # Upload chunks 
+                use_streaming = not args.no_stream
+                if use_streaming:
+                    print(f"🔄 Using memory-efficient streaming upload")
+                    if not upload_chunks_streaming(conn, files['embeddings_output'], args.batch_size, args.csv_chunk_size):
+                        return 1
+                else:
+                    print(f"🔄 Using traditional in-memory upload")
+                    # Load embeddings for traditional approach
+                    chunks_with_embeddings = load_embeddings(files['embeddings_output'])
+                    if chunks_with_embeddings is None:
+                        return 1
+                    if not upload_chunks(conn, chunks_with_embeddings, args.batch_size):
+                        return 1
                 
                 # Verify upload
                 if not verify_upload(conn):

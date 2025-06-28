@@ -6,7 +6,7 @@
         <span class="file-name">{{ fileName }}</span>
         <div class="status">
           <span class="status-dot"></span>
-          <span>Issues found: {{ results.length }}</span>
+          <span>Issues found: {{ totalIssues }}</span>
         </div>
       </div>
     </div>
@@ -15,12 +15,17 @@
       <div v-for="(result, index) in results" :key="index" class="result-item">
         <div class="result-item-header" @click="toggleResult(index)">
           <div class="result-title">
-            <span>{{ result.title }}</span>
+            <span>{{ result.point_number }}: {{ activeIndex === index ? result.point_content : truncate(result.point_content, 100) }}</span>
           </div>
           <span class="arrow-icon" :class="{ 'arrow-down': activeIndex === index }">▼</span>
         </div>
         <div v-if="activeIndex === index" class="result-content">
-          <p>{{ result.details }}</p>
+          <div v-for="(analysis, analysisIndex) in result.analysis_points" :key="analysisIndex" class="analysis-item">
+            <h4>Issue {{ analysisIndex + 1 }}</h4>
+            <p><strong>Cause:</strong> {{ analysis.cause }}</p>
+            <p><strong>Risk:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
+            <p><strong>Recommendation:</strong> {{ analysis.recommendation }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -34,7 +39,8 @@ export default {
     return {
       activeIndex: null,
       fileName: '',
-      results: []
+      results: [],
+      totalIssues: 0,
     };
   },
   created() {
@@ -43,16 +49,10 @@ export default {
     if (resultsData) {
       const apiResponse = JSON.parse(resultsData);
       if (apiResponse.document_points) {
-        this.results = apiResponse.document_points.map(point => {
-          const details = point.analysis_points.map(analysis => {
-            return `Risk: ${analysis.risk}\nCause: ${analysis.cause}\nRecommendation: ${analysis.recommendation}`;
-          }).join('\\n\\n');
-
-          return {
-            title: point.point_content,
-            details: details
-          };
-        });
+        this.results = apiResponse.document_points;
+        this.totalIssues = this.results.reduce((total, result) => {
+            return total + (result.analysis_points ? result.analysis_points.length : 0);
+        }, 0);
       }
     } else {
       this.$router.push('/');
@@ -61,6 +61,26 @@ export default {
   methods: {
     toggleResult(index) {
       this.activeIndex = this.activeIndex === index ? null : index;
+    },
+    truncate(text, length) {
+        if (text && text.length > length) {
+            return text.substring(0, length) + '...';
+        }
+        return text;
+    },
+    getRiskClass(risk) {
+        if (!risk) return '';
+        const riskLowerCase = risk.toLowerCase();
+        if (riskLowerCase.includes('высокий')) {
+            return 'risk-high';
+        }
+        if (riskLowerCase.includes('средний')) {
+            return 'risk-medium';
+        }
+        if (riskLowerCase.includes('низкий')) {
+            return 'risk-low';
+        }
+        return '';
     }
   }
 }
@@ -127,6 +147,7 @@ export default {
     align-items: center;
     padding: 20px 25px;
     cursor: pointer;
+    line-height: 1.5;
 }
 
 .result-title {
@@ -149,6 +170,48 @@ export default {
     border-top: 1px solid #1e293b;
     margin-top: 15px;
     padding-top: 20px;
+}
+
+.analysis-item {
+    background-color: #1e293b;
+    border-radius: 10px;
+    padding: 15px 20px;
+    margin-bottom: 15px;
+}
+
+.analysis-item:last-child {
+    margin-bottom: 0;
+}
+
+.analysis-item h4 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #ffffff;
+}
+
+.analysis-item p {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.analysis-item p strong {
+    color: #cbd5e0;
+}
+
+.risk-high {
+    color: #e53e3e;
+    font-weight: bold;
+}
+
+.risk-medium {
+    color: #dd6b20;
+    font-weight: bold;
+}
+
+.risk-low {
+    color: #38a169;
+    font-weight: bold;
 }
 
 .result-content p {
