@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import UploadScreen from '../views/UploadScreen.vue';
 import ProcessingScreen from '../views/ProcessingScreen.vue';
 import ResultsScreen from '../views/ResultsScreen.vue';
+import ChatScreen from '../views/ChatScreen.vue';
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: '/results',
     name: 'Results',
     component: ResultsScreen,
+  },
+  {
+    path: '/spaces/:spaceId',
+    name: 'Chat',
+    component: ChatScreen,
   },
 ];
 
