@@ -7,7 +7,7 @@ pipeline {
                 checkout scm
             }
         }
-        stage('Build & Test') {
+        stage('Test') {
             parallel {
                 stage('Python Service') {
                     steps {
