@@ -10,6 +10,12 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Python Service') {
+                    agent {
+                        docker {
+                            image 'python:3.11'
+                            args '-v $HOME/.cache/pip:/root/.cache/pip' 
+                        }
+                    }
                     steps {
                         dir('analyzer') {
                             sh 'python -m venv venv'
@@ -19,6 +25,11 @@ pipeline {
                     }
                 }
                 stage('Java Service') {
+                    agent {
+                        docker {
+                            image 'maven:3.9.6-eclipse-temurin-17'
+                        }
+                    }
                     steps {
                         dir('backend') {
                             sh 'mvn clean package'
