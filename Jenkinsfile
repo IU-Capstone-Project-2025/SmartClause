@@ -38,12 +38,12 @@ pipeline {
                                     ).trim()
                                     
                                     if (statusCode == "200") {
-                                        echo "Фронтенд успешно запущен и отвечает с кодом: ${statusCode}"
+                                        echo "Frontend successfully started and responds with code: ${statusCode}"
                                     } else {
-                                        error "Фронтенд ответил с неверным статус-кодом: ${statusCode}"
+                                        error "Frontend responded with incorrect status code: ${statusCode}"
                                     }
                                 } catch (Exception e) {
-                                    error "Не удалось подключиться к фронтенду: ${e.message}"
+                                    error "Failed to connect to frontend: ${e.message}"
                                 }
                             }
                             sleep(time: 5, unit: 'SECONDS')
@@ -62,13 +62,13 @@ pipeline {
 
     post {
         always {
-            echo 'Пайплайн завершён'
+            echo 'Pipeline finished'
         }
         success {
-            echo 'Все сервисы успешно собраны и протестированы!'
+            echo 'All services have been successfully built and tested!'
         }
         failure {
-            echo 'Ошибка на одном из этапов'
+            echo 'Error at one of the stages'
         }
     }
 }
