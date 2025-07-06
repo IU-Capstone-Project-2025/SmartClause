@@ -1,7 +1,9 @@
 package com.capstone.SmartClause.controller;
 
 import com.capstone.SmartClause.model.AnalysisResponse;
+import com.capstone.SmartClause.model.dto.ChatDto;
 import com.capstone.SmartClause.service.AnalysisService;
+import com.capstone.SmartClause.service.ChatService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -32,6 +34,9 @@ public class Controller {
     @Autowired
     private AnalysisService analysisService;
 
+    @Autowired
+    private ChatService chatService;
+
     @Operation(summary = "Upload and analyze a document", description = "Uploads a document file and returns analysis results")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Document analyzed successfully",
@@ -53,17 +58,40 @@ public class Controller {
         }
     }
     
-    @Operation(summary = "Check service health", description = "Returns the health status of the service")
+    @Operation(summary = "Check service health", description = "Returns the health status of the service and connected microservices")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Service is healthy",
                 content = @Content(mediaType = "application/json"))
     })
     @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> healthCheck() {
-        return ResponseEntity.ok(Map.of(
-            "status", "UP",
-            "service", "SmartClause API",
-            "timestamp", java.time.Instant.now().toString()
-        ));
+    public ResponseEntity<Map<String, Object>> healthCheck() {
+        try {
+            // Check chat service health
+            ChatDto.ChatHealthResponse chatHealth = chatService.checkChatHealth();
+            boolean chatHealthy = "healthy".equals(chatHealth.getStatus()) || "degraded".equals(chatHealth.getStatus());
+            
+            String overallStatus = chatHealthy ? "UP" : "DEGRADED";
+            
+            return ResponseEntity.ok(Map.of(
+                "status", overallStatus,
+                "service", "SmartClause API",
+                "timestamp", java.time.Instant.now().toString(),
+                "chat_service", Map.of(
+                    "status", chatHealth.getStatus(),
+                    "database_connected", chatHealth.isDatabaseConnected(),
+                    "analyzer_connected", chatHealth.isAnalyzerConnected()
+                )
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                "status", "DEGRADED",
+                "service", "SmartClause API",
+                "timestamp", java.time.Instant.now().toString(),
+                "chat_service", Map.of(
+                    "status", "unreachable",
+                    "error", "Chat service is not available"
+                )
+            ));
+        }
     }
 }
