@@ -36,6 +36,20 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./analyzer/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  chat:
+    build: ./chat
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./chat:/app
+    env_file:
+      - ./chat/.env
+    environment:
+      - ANALYZER_BASE_URL=http://analyzer:8001/api/v1
+    depends_on:
+      - postgres
+      - analyzer
+
   frontend:
     build: ./frontend
     command: npm run serve
@@ -47,6 +61,7 @@ services:
     depends_on:
       - backend
       - analyzer
+      - chat
 
 volumes:
   postgres_data:
