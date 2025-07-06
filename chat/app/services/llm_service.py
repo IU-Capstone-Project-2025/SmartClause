@@ -8,6 +8,7 @@ from ..core.config import settings
 from ..models.database import Message, MessageType
 from .retrieval_service import retrieval_service
 from .memory_service import memory_service
+from .document_service import document_service
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,10 @@ class LLMService:
                 k_chunks=3
             )
             
+            # Get document analysis context from the same space
+            space_documents = await document_service.get_space_documents_with_analysis(space_id, user_id)
+            document_analysis_context = document_service.format_analysis_for_llm(space_documents)
+            
             # Format conversation history for LLM
             conversation_context = self._format_conversation_history(conversation_history)
             
@@ -64,10 +69,11 @@ class LLMService:
                 response_text = await self._generate_llm_response(
                     user_message=user_message,
                     conversation_context=conversation_context,
-                    legal_context=legal_context
+                    legal_context=legal_context,
+                    document_analysis_context=document_analysis_context
                 )
             else:
-                response_text = self._generate_mock_response(user_message, context)
+                response_text = self._generate_mock_response(user_message, context, space_documents)
             
             # Prepare metadata
             metadata = {
@@ -76,6 +82,11 @@ class LLMService:
                     "legal_rules_count": len(context.get("legal_rules", [])),
                     "document_chunks_count": len(context.get("document_chunks", [])),
                     "query": context.get("query", "")
+                },
+                "document_analysis_context": {
+                    "total_documents": space_documents.get("total_documents", 0),
+                    "analyzed_documents": space_documents.get("analyzed_documents", 0),
+                    "documents_included": bool(document_analysis_context)
                 },
                 "analysis_context": {
                     "space_id": space_id,
@@ -98,7 +109,8 @@ class LLMService:
         self,
         user_message: str,
         conversation_context: str,
-        legal_context: str
+        legal_context: str,
+        document_analysis_context: str = ""
     ) -> str:
         """Generate response using OpenRouter LLM"""
         try:
@@ -109,7 +121,8 @@ class LLMService:
             user_prompt = self._build_user_prompt(
                 user_message=user_message,
                 conversation_context=conversation_context,
-                legal_context=legal_context
+                legal_context=legal_context,
+                document_analysis_context=document_analysis_context
             )
             
             # Make API call to OpenRouter with configured model
@@ -161,7 +174,8 @@ Provide clear, actionable, and legally sound advice."""
         self,
         user_message: str,
         conversation_context: str,
-        legal_context: str
+        legal_context: str,
+        document_analysis_context: str = ""
     ) -> str:
         """Build the user prompt with all context"""
         prompt_parts = []
@@ -177,11 +191,16 @@ Provide clear, actionable, and legally sound advice."""
             prompt_parts.append(legal_context)
             prompt_parts.append("")
         
+        # Add document analysis context if available
+        if document_analysis_context.strip():
+            prompt_parts.append(document_analysis_context)
+            prompt_parts.append("")
+        
         # Add current user message
         prompt_parts.append("=== USER QUESTION ===")
         prompt_parts.append(user_message)
         prompt_parts.append("")
-        prompt_parts.append("Please provide a comprehensive response based on the available legal context and conversation history.")
+        prompt_parts.append("Please provide a comprehensive response based on the available legal context, document analysis, and conversation history.")
         
         return "\n".join(prompt_parts)
     
@@ -237,14 +256,21 @@ Provide clear, actionable, and legally sound advice."""
             logger.error(f"Error extracting document references: {e}")
             return []
     
-    def _generate_mock_response(self, user_message: str, context: Dict[str, Any]) -> str:
+    def _generate_mock_response(self, user_message: str, context: Dict[str, Any], space_documents: Dict[str, Any] = None) -> str:
         """Generate a mock response when LLM is not available"""
         legal_rules_count = len(context.get("legal_rules", []))
         chunks_count = len(context.get("document_chunks", []))
         
+        # Include document analysis information
+        document_info = ""
+        if space_documents:
+            total_docs = space_documents.get("total_documents", 0)
+            analyzed_docs = space_documents.get("analyzed_documents", 0)
+            document_info = f"\n\nДокументы в этом пространстве: {total_docs} (анализ доступен для {analyzed_docs})"
+        
         return f"""Благодарю за ваш вопрос: "{user_message}"
 
-На основе анализа правовой базы данных я нашел {legal_rules_count} релевантных правовых норм и {chunks_count} документальных фрагментов.
+На основе анализа правовой базы данных я нашел {legal_rules_count} релевантных правовых норм и {chunks_count} документальных фрагментов.{document_info}
 
 [ДЕМО-РЕЖИМ: Настоящий ответ будет сгенерирован после настройки OpenRouter API ключа]
 

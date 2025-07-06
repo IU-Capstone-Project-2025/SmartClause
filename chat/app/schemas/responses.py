@@ -43,6 +43,7 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="API version")
     database_connected: bool = Field(..., description="Database connection status")
     analyzer_connected: bool = Field(..., description="Analyzer service connection status")
+    backend_connected: bool = Field(..., description="Backend service connection status")
 
 
 class ChatSessionResponse(BaseModel):

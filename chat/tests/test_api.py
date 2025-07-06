@@ -10,7 +10,7 @@ client = TestClient(app)
 
 def test_health_endpoint():
     """Test the health check endpoint"""
-    response = client.get("/api/v1/health")
+    response = client.get("/api/health")
     assert response.status_code == 200
     
     data = response.json()
@@ -22,7 +22,7 @@ def test_health_endpoint():
 
 def test_get_messages_invalid_space_id():
     """Test getting messages with invalid space ID"""
-    response = client.get("/api/v1/spaces/invalid-uuid/messages")
+    response = client.get("/api/spaces/invalid-uuid/messages")
     assert response.status_code == 400
     assert "Invalid space ID format" in response.json()["detail"]
 
@@ -30,7 +30,7 @@ def test_get_messages_invalid_space_id():
 def test_get_messages_valid_space_id():
     """Test getting messages with valid space ID"""
     space_id = str(uuid.uuid4())
-    response = client.get(f"/api/v1/spaces/{space_id}/messages")
+    response = client.get(f"/api/spaces/{space_id}/messages")
     assert response.status_code == 200
     
     data = response.json()
@@ -47,7 +47,7 @@ def test_send_message_invalid_space_id():
         "type": "user"
     }
     
-    response = client.post("/api/v1/spaces/invalid-uuid/messages", json=message_data)
+    response = client.post("/api/spaces/invalid-uuid/messages", json=message_data)
     assert response.status_code == 400
     assert "Invalid space ID format" in response.json()["detail"]
 
@@ -60,7 +60,7 @@ def test_send_message_empty_content():
         "type": "user"
     }
     
-    response = client.post(f"/api/v1/spaces/{space_id}/messages", json=message_data)
+    response = client.post(f"/api/spaces/{space_id}/messages", json=message_data)
     assert response.status_code == 422  # Validation error
 
 
@@ -72,14 +72,14 @@ def test_send_message_invalid_type():
         "type": "invalid"
     }
     
-    response = client.post(f"/api/v1/spaces/{space_id}/messages", json=message_data)
+    response = client.post(f"/api/spaces/{space_id}/messages", json=message_data)
     assert response.status_code == 422  # Validation error
 
 
 def test_get_chat_session():
     """Test getting chat session information"""
     space_id = str(uuid.uuid4())
-    response = client.get(f"/api/v1/spaces/{space_id}/session")
+    response = client.get(f"/api/spaces/{space_id}/session")
     assert response.status_code == 200
     
     data = response.json()
@@ -97,7 +97,7 @@ def test_update_memory_length():
         "memory_length": 15
     }
     
-    response = client.put(f"/api/v1/spaces/{space_id}/session/memory", json=memory_data)
+    response = client.put(f"/api/spaces/{space_id}/session/memory", json=memory_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -111,7 +111,7 @@ def test_update_memory_length_invalid():
         "memory_length": 100  # Too high
     }
     
-    response = client.put(f"/api/v1/spaces/{space_id}/session/memory", json=memory_data)
+    response = client.put(f"/api/spaces/{space_id}/session/memory", json=memory_data)
     assert response.status_code == 422  # Validation error
 
 
@@ -120,15 +120,15 @@ def test_pagination_parameters():
     space_id = str(uuid.uuid4())
     
     # Test negative offset
-    response = client.get(f"/api/v1/spaces/{space_id}/messages?offset=-1")
+    response = client.get(f"/api/spaces/{space_id}/messages?offset=-1")
     assert response.status_code == 400
     
     # Test limit too high
-    response = client.get(f"/api/v1/spaces/{space_id}/messages?limit=200")
+    response = client.get(f"/api/spaces/{space_id}/messages?limit=200")
     assert response.status_code == 400
     
     # Test valid pagination
-    response = client.get(f"/api/v1/spaces/{space_id}/messages?limit=10&offset=0")
+    response = client.get(f"/api/spaces/{space_id}/messages?limit=10&offset=0")
     assert response.status_code == 200
 
 

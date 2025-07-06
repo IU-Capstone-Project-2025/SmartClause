@@ -14,6 +14,7 @@ from ..schemas.responses import (
 from ..services.memory_service import memory_service
 from ..services.llm_service import llm_service
 from ..services.retrieval_service import retrieval_service
+from ..services.document_service import document_service
 from ..models.database import MessageType
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,17 @@ async def health_check():
         # Check analyzer service health
         analyzer_healthy = await retrieval_service.check_analyzer_health()
         
-        overall_status = "healthy" if analyzer_healthy else "degraded"
+        # Check backend service health
+        backend_healthy = await document_service.check_backend_health()
+        
+        overall_status = "healthy" if (analyzer_healthy and backend_healthy) else "degraded"
         
         return HealthResponse(
             status=overall_status,
             version=settings.api_version,
             database_connected=True,  # We assume DB is connected if we get this far
-            analyzer_connected=analyzer_healthy
+            analyzer_connected=analyzer_healthy,
+            backend_connected=backend_healthy
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -71,7 +76,8 @@ async def health_check():
             status="unhealthy",
             version=settings.api_version,
             database_connected=False,
-            analyzer_connected=False
+            analyzer_connected=False,
+            backend_connected=False
         )
 
 

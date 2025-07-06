@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
     # LLM model configuration
-    llm_model: str = "anthropic/claude-3.5-sonnet"  # Default model
+    llm_model: str = "google/gemini-2.5-flash-lite-preview-06-17"  # Default model
     llm_temperature: float = 0.7
     llm_max_tokens: int = 2000
     

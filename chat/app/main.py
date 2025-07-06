@@ -32,7 +32,7 @@ app.add_middleware(
 )
 
 # Include API routes
-app.include_router(routes.router)
+app.include_router(routes.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
@@ -41,14 +41,13 @@ async def root():
         "message": "SmartClause Chat API",
         "version": settings.api_version,
         "documentation": "/docs",
-        "health": "/health"
+        "health": "/api/v1/health"
     }
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application on startup"""
     logger.info("Starting SmartClause Chat API...")
-    logger.info(f"Chat API version: {settings.api_version}")
     logger.info(f"Max memory messages: {settings.max_memory_messages}")
     logger.info(f"Analyzer base URL: {settings.analyzer_base_url}")
     
