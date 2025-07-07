@@ -9,7 +9,6 @@ from ..schemas.requests import AnalyzeRequest, RetrieveRequest
 from ..schemas.responses import (
     AnalysisPoint, AnalyzeResponse, DocumentPointAnalysis
 )
-from ..models.database import AnalysisResult
 from .embedding_service import embedding_service
 from .document_parser import document_parser
 from .retrieval_service import retrieval_service
