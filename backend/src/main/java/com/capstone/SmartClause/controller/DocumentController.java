@@ -23,6 +23,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE}, maxAge = 3600)
@@ -267,6 +270,52 @@ public class DocumentController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to start reanalysis"));
+        }
+    }
+
+    @Operation(summary = "Export document analysis as PDF", description = "Exports the analysis results for a document as a PDF report")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "PDF report generated successfully",
+                content = @Content(mediaType = "application/pdf")),
+        @ApiResponse(responseCode = "404", description = "Document or analysis not found",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "401", description = "Authentication required",
+                content = @Content(mediaType = "application/json"))
+    })
+    @GetMapping("/documents/{documentId}/analysis/export")
+    public ResponseEntity<?> exportDocumentAnalysisPdf(
+            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Parameter(description = "Document ID") @PathVariable String documentId) {
+        
+        try {
+            UUID documentUuid = UUID.fromString(documentId);
+            
+            // Extract user ID from authorization header
+            String userId = authUtils.extractUserIdFromHeader(authorization);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication required"));
+            }
+            
+            byte[] pdfBytes = documentService.exportDocumentAnalysisPdf(documentUuid, userId);
+            
+            if (pdfBytes == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Analysis not found for this document"));
+            }
+            
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=analysis_report_" + documentId + ".pdf")
+                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(pdfBytes.length))
+                .body(pdfBytes);
+                
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Invalid document ID format"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to export analysis PDF"));
         }
     }
 } 
