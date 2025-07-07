@@ -65,6 +65,11 @@ class AnalyzerService(RetryMixin):
                 if (len(point.analysis_points) > 0 and 
                     point.analysis_points[0].cause != "Не удалось провести автоматический анализ")
             )
+            
+            # Calculate validation metrics
+            validated_points = sum(1 for point in analyzed_points if len(point.analysis_points) > 0)
+            invalidated_points = len(analyzed_points) - validated_points
+            
             total_points = len(analyzed_points)
             total_duration = (datetime.now() - analysis_start).total_seconds()
             
@@ -72,7 +77,8 @@ class AnalyzerService(RetryMixin):
                 f"Analysis completed in {total_duration:.2f}s "
                 f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
                 f"Success rate: {successful_points}/{total_points} "
-                f"({(successful_points/total_points*100):.1f}%)"
+                f"({(successful_points/total_points*100):.1f}%) - "
+                f"Validation: {validated_points} kept, {invalidated_points} filtered out"
             )
             
             # Create response
@@ -261,8 +267,17 @@ class AnalyzerService(RetryMixin):
                 if (analysis_points and 
                     len(analysis_points) > 0 and 
                     analysis_points[0].cause != "Не удалось провести автоматический анализ"):
-                    logger.debug(f"Successfully parsed LLM response for point {point_number} on attempt {attempt + 1}")
-                    return analysis_points
+                    
+                    # Second LLM call for validation
+                    logger.info(f"Running validation for point {point_number}")
+                    validated_analysis = await self._validate_analysis_with_llm(
+                        analysis_points, 
+                        prompt,
+                        point_number
+                    )
+                    
+                    logger.info(f"Successfully validated analysis for point {point_number}")
+                    return validated_analysis
                 else:
                     # Parsing failed, but this counts as a "parsing failure"
                     if attempt < max_attempts - 1:
@@ -308,44 +323,223 @@ class AnalyzerService(RetryMixin):
         # This shouldn't be reached, but just in case
         return self._get_default_analysis()
 
+    async def _validate_analysis_with_llm(
+        self, 
+        analysis_points: List[AnalysisPoint], 
+        original_prompt: str,
+        point_number: int
+    ) -> List[AnalysisPoint]:
+        """
+        Second LLM call to validate the analysis results
+        
+        Args:
+            analysis_points: Results from first LLM call
+            original_prompt: Original prompt with document context
+            point_number: Point number for logging
+            
+        Returns:
+            Validated analysis points (may return empty list if issues found)
+        """
+        try:
+            # Create validation prompt
+            validation_prompt = await self._create_validation_prompt(analysis_points, original_prompt)
+            
+            # Make validation LLM call
+            validation_response = await concurrency_manager.with_llm_limit(
+                asyncio.wait_for(
+                    self._call_llm(validation_prompt),
+                    timeout=settings.llm_timeout
+                )
+            )
+            
+            # Parse validation response
+            validation_result = self._parse_validation_response(validation_response)
+            
+            if validation_result.get("is_valid", False):
+                logger.info(f"Point {point_number}: Analysis validated successfully")
+                return analysis_points
+            else:
+                reason = validation_result.get("reason", "Unknown validation failure")
+                logger.info(f"Point {point_number}: Analysis invalidated - {reason}")
+                return []  # Return empty array for invalid analysis
+                
+        except Exception as e:
+            logger.warning(f"Point {point_number}: Validation failed ({e}), keeping original analysis")
+            # If validation fails, keep original analysis rather than losing it
+            return analysis_points
+
+    async def _create_validation_prompt(self, analysis_points: List[AnalysisPoint], original_prompt: str) -> str:
+        """Create validation prompt for second LLM call"""
+        
+        # Convert analysis points to JSON string for validation
+        analysis_json = "[\n"
+        for i, point in enumerate(analysis_points):
+            if i > 0:
+                analysis_json += ",\n"
+            analysis_json += f'  {{\n    "cause": "{point.cause}",\n    "risk": "{point.risk}",\n    "recommendation": "{point.recommendation}"\n  }}'
+        analysis_json += "\n]"
+        
+        return f"""
+Ты — старший юрист-эксперт по валидации правового анализа.
+Твоя задача — проверить корректность анализа пункта договора, выполненного другим юристом.
+
+ИСХОДНЫЕ ДАННЫЕ:
+{original_prompt}
+
+АНАЛИЗ ДЛЯ ПРОВЕРКИ:
+{analysis_json}
+
+ЗАДАЧА ВАЛИДАЦИИ:
+Проверь анализ по следующим критериям:
+
+1. ФОРМАТ: Анализ представлен в корректном JSON формате с полями cause, risk, recommendation
+2. РЕАЛЬНОСТЬ ПРОБЛЕМЫ: Действительно ли найденные проблемы существуют в данном пункте договора, учитывая ВЕСЬ контекст документа?
+3. ЛОЖНЫЕ СРАБАТЫВАНИЯ: Не являются ли найденные "проблемы" нормальными элементами (плейсхолдеры для email, ФИО, паспортных данных и т.д.)?
+
+ОСОБОЕ ВНИМАНИЕ:
+- Если проблема уже решена в других пунктах договора → анализ НЕВАЛИДНЫЙ
+- Если указаны плейсхолдеры для персональных данных (ФИО, email, паспорт) → это НЕ проблема
+- Если анализ указывает на несуществующие или уже решенные проблемы → анализ НЕВАЛИДНЫЙ
+
+ФОРМАТ ОТВЕТА (строго JSON):
+{{
+  "is_valid": true/false,
+  "reason": "Краткое объяснение решения"
+}}
+
+ПРИМЕРЫ:
+
+ПРИМЕР 1 - ВАЛИДНЫЙ АНАЛИЗ:
+Пункт: "Оплата в разумный срок"
+Анализ: "Неопределенность термина 'разумный срок'"
+Результат: {{"is_valid": true, "reason": "Проблема реальна, термин действительно неопределен"}}
+
+ПРИМЕР 2 - НЕВАЛИДНЫЙ АНАЛИЗ:
+Пункт: "ФИО: ___________"
+Анализ: "Отсутствуют данные о ФИО"
+Результат: {{"is_valid": false, "reason": "Плейсхолдер для ФИО является нормальным элементом договора"}}
+
+ПРИМЕР 3 - НЕВАЛИДНЫЙ АНАЛИЗ:
+Пункт: "Сроки не указаны"
+Контекст содержит: "п. 4.2 Срок исполнения: 30 дней"
+Результат: {{"is_valid": false, "reason": "Сроки указаны в п. 4.2, проблема уже решена в документе"}}
+"""
+
+    def _parse_validation_response(self, validation_response: str) -> Dict[str, Any]:
+        """Parse validation response from second LLM"""
+        try:
+            import json
+            
+            if not validation_response or not validation_response.strip():
+                logger.debug("Empty validation response")
+                return {"is_valid": True, "reason": "Empty validation response, keeping original"}
+            
+            # Extract JSON from response
+            text = validation_response.strip()
+            json_start = text.find('{')
+            json_end = text.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_text = text[json_start:json_end]
+                
+                try:
+                    validation_result = json.loads(json_text)
+                    
+                    # Ensure required fields exist
+                    if "is_valid" in validation_result:
+                        return {
+                            "is_valid": bool(validation_result["is_valid"]),
+                            "reason": validation_result.get("reason", "No reason provided")
+                        }
+                    else:
+                        logger.debug("Validation response missing 'is_valid' field")
+                        return {"is_valid": True, "reason": "Invalid validation format, keeping original"}
+                        
+                except json.JSONDecodeError as e:
+                    logger.debug(f"JSON decode error in validation: {e}")
+                    return {"is_valid": True, "reason": "Validation JSON parse error, keeping original"}
+            else:
+                logger.debug("No JSON found in validation response")
+                return {"is_valid": True, "reason": "No JSON in validation response, keeping original"}
+                
+        except Exception as e:
+            logger.error(f"Error parsing validation response: {e}")
+            return {"is_valid": True, "reason": "Validation parsing error, keeping original"}
+
     async def _create_prompt(self, point_content: str, full_document: str) -> str:
         """Create LLM prompt for legal analysis"""
         return f"""
-Вы — старший юрист-практик по договорному праву РФ.
-Отвечаете строго на русском.
+Ты — старший юрист-практик по договорному праву РФ. 
+Твоя задача — проанализировать один конкретный пункт договора и выявить потенциальные правовые проблемы и риски, а также предложить конкретные рекомендации по улучшению. Не анализируй весь договор целиком, а только конкретный пункт.
+Отвечай строго на русском.
 Формат ответа — JSON.  
-Не добавляйте комментариев, колонтитулов, markdown или любого текста вне JSON.
+Не добавляй комментариев, колонтитулов, markdown или любого текста вне JSON.
 
-ПУНКТ ДЛЯ АНАЛИЗА:
+КОНКРЕТНЫЙ ПУНКТ ДЛЯ АНАЛИЗА (АНАЛИЗИРУЙ ТОЛЬКО ЭТОТ ПУНКТ):
 {point_content}
 
-КОНТЕКСТ ДОКУМЕНТА:
-{full_document[:1500]}...
+КОНТЕКСТ ВСЕГО ДОКУМЕНТА:
+{full_document}
 
-РЕЛЕВАНТНЫЕ ПРАВОВЫЕ НОРМЫ:
+РЕЛЕВАНТНЫЕ ОФИЦИАЛЬНЫЕ ПРАВОВЫЕ НОРМЫ ИЗ КОДЕКСОВ Российской Федерации (которые могут помочь, но не обязательно):
 {{context}}
 
 ЗАДАЧА:
-Проанализируйте данный пункт договора и выявите:
-1. Потенциальные причины правовых проблем
+Проанализируй данный пункт договора и выявите:
+1. Потенциальные причины правовых проблем (учитывай весь контекст договора, вдруг проблема решена в другом пункте)
 2. Связанные с ними риски
 3. Конкретные рекомендации по улучшению
 
 ФОРМАТ ОТВЕТА:
-Верните анализ в следующе строгом JSON формате:
+Верни анализ в следующе строгом JSON формате:
 [
   {{
     "cause": "Описание выявленной проблемы или недочета",
-    "risk": "Описание риска и его уровень",
+    "risk": "Описание риска и его уровень (Низкий/Средний/Высокий)",
     "recommendation": "Конкретная рекомендация по устранению проблемы"
   }}
 ]
 
 ВАЖНО:
-- Если проблем не обнаружено, верните пустой массив []
-- Фокусируйтесь на практических правовых аспектах
+- Если проблем не обнаружено, верни пустой массив []
+- Фокусируйся на практических правовых аспектах
 - Рекомендации должны быть конкретными и применимыми
-- Учитывайте российское законодательство
+- Учитывай российское правовоезаконодательство
+- Не считать ошибкой отсутствующие данные — e-mail, ФИО., паспортные реквизиты — если в договоре стоят явные плейсхолдеры, пустые места. Это не ошибка, это нормально, не надо ничего исправлять.
+- ОБЯЗАТЕЛЬНО учитывай весь контекст договора: возможно, аналогичное условие уже присутствует в других пунктах договора.
+
+### Пример работы
+ПУНКТ ДЛЯ АНАЛИЗА:
+Заказчик вправе в любой момент в одностороннем порядке отказаться от исполнения Договора, уведомив Подрядчика не позднее чем за 1 (один) календарный день до предполагаемой даты расторжения. При этом Заказчик не несёт расходов, связанных с таким отказом.
+КОНТЕКСТ ДОКУМЕНТА:
+ДОГОВОР № 12-А/24 «Оказание маркетинговых услуг»
+г. Москва, 15 января 2024 г.
+…
+2. Предмет договора
+2.1. Подрядчик оказывает Заказчику услуги по разработке и запуску рекламной кампании в интернете и наружных медиа.
+…
+4. Порядок оплаты
+4.1. Стоимость услуг составляет 3 200 000 (Три миллиона двести тысяч) рублей. Оплата производится поэтапно:
+— 50 % аванс в течение 5 рабочих дней после подписания договора;
+— 50 % — в течение 10 рабочих дней после подписания итогового акта.
+…
+6. Ответственность сторон
+6.3. Заказчик вправе в любой момент отказаться от исполнения Договора (см. пункт <данный_пункт>).
+…
+9. Прочие условия
+9.2. Все споры решаются в Арбитражном суде г. Москвы.
+РЕЛЕВАНТНЫЕ ПРАВОВЫЕ НОРМЫ:
+— ст. 782 ГК РФ «Односторонний отказ от договора возмездного оказания услуг»
+— ст. 310 ГК РФ «Недопустимость одностороннего отказа, кроме случаев, предусмотренных законом»
+— Постановление Пленума ВАС РФ № 16 от 14.03.2014 г., п. 10 (о возмещении исполнителю фактических расходов)
+ОЖИДАЕМЫЙ JSON:
+[
+{{
+"cause": "Крайне короткий срок уведомления (1 день) и отсутствие компенсации нарушают баланс интересов и не дают Подрядчику возможности минимизировать убытки",
+"risk": "Высокий: Подрядчик может понести некомпенсированные затраты и обратиться с иском о взыскании расходов, что повлечёт судебные издержки и репутационные потери для Заказчика",
+"recommendation": "Увеличить срок уведомления до минимум 15 календарных дней и предусмотреть обязанность Заказчика возместить фактически понесённые Подрядчиком расходы (ст. 782 ГК РФ)"
+}}
+]
 """
 
     async def _call_llm(self, prompt: str) -> str:
