@@ -59,4 +59,35 @@ public class AnalysisService {
             throw new RuntimeException("Failed to process document: " + e.getMessage(), e);
         }
     }
+
+    public byte[] exportAnalysisPdf(String documentId) {
+        logger.info("Exporting analysis as PDF for document: {}", documentId);
+
+        String exportUrl = analyzerApiUrl + "/export/" + documentId + "/pdf";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(MediaType.parseMediaTypes("application/pdf"));
+
+        HttpEntity<?> requestEntity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<byte[]> response = restTemplate.exchange(
+                    exportUrl,
+                    HttpMethod.GET,
+                    requestEntity,
+                    byte[].class
+            );
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                logger.info("PDF export completed successfully for document: {}", documentId);
+                return response.getBody();
+            } else {
+                logger.error("PDF export failed for document: {}, status: {}", documentId, response.getStatusCode());
+                throw new RuntimeException("Failed to export PDF: Analyzer service returned " + response.getStatusCode());
+            }
+        } catch (Exception e) {
+            logger.error("Error during PDF export for document {}: {}", documentId, e.getMessage(), e);
+            throw new RuntimeException("Failed to export PDF: " + e.getMessage(), e);
+        }
+    }
 }

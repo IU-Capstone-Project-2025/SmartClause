@@ -277,6 +277,42 @@ public class DocumentService {
         return newAnalysisDocumentId;
     }
 
+    public byte[] exportDocumentAnalysisPdf(UUID documentId, String userId) {
+        logger.info("Exporting analysis PDF for document: {} and user: {}", documentId, userId);
+        
+        // First verify the document belongs to the user
+        Optional<Document> documentOpt = userId != null 
+            ? documentRepository.findByIdAndUserId(documentId, userId)
+            : documentRepository.findById(documentId);
+            
+        if (documentOpt.isEmpty()) {
+            throw new IllegalArgumentException("Document not found");
+        }
+
+        Document document = documentOpt.get();
+        
+        // Check if document has analysis results
+        if (document.getAnalysisDocumentId() == null) {
+            throw new IllegalArgumentException("No analysis found for this document");
+        }
+        
+        // Verify analysis exists in database
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        if (analysisOpt.isEmpty()) {
+            throw new IllegalArgumentException("Analysis not found for this document");
+        }
+
+        try {
+            // Call analyzer service to export PDF
+            byte[] pdfBytes = analysisService.exportAnalysisPdf(document.getAnalysisDocumentId());
+            logger.info("PDF export completed for document: {}", documentId);
+            return pdfBytes;
+        } catch (Exception e) {
+            logger.error("Failed to export PDF for document: {}", documentId, e);
+            throw new RuntimeException("Failed to export analysis PDF: " + e.getMessage(), e);
+        }
+    }
+
     private void startDocumentAnalysis(Document document) {
         try {
             // Update status to processing
