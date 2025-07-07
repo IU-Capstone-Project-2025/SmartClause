@@ -29,7 +29,8 @@ class AnalyzerService(RetryMixin):
             )
             logger.info("OpenRouter client initialized successfully")
         else:
-            logger.warning("OpenRouter API key not found. LLM analysis will use mock responses.")
+            logger.error("OpenRouter API key not found. Analysis will fail without proper LLM configuration.")
+            raise ValueError("OpenRouter API key is required for analysis functionality")
     
     async def analyze_document(self, request: AnalyzeRequest, db: Session) -> AnalyzeResponse:
         """Analyze document for legal risks and recommendations with concurrent processing"""
@@ -59,18 +60,35 @@ class AnalyzerService(RetryMixin):
             analyzed_points = await self._analyze_points_concurrently(document_points, document_text, db)
             analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
             
-            # Calculate success metrics
+            # Filter out points with empty analysis lists
+            logger.info(f"Before filtering: {len(analyzed_points)} points analyzed")
+            for i, point in enumerate(analyzed_points):
+                logger.info(f"Point {point.point_number}: has {len(point.analysis_points)} analysis points")
+            
+            filtered_points = [
+                point for point in analyzed_points 
+                if len(point.analysis_points) > 0
+            ]
+            
+            logger.info(f"After filtering: {len(filtered_points)} points kept, {len(analyzed_points) - len(filtered_points)} points filtered out")
+            
+            # Log which points were filtered out
+            for point in analyzed_points:
+                if len(point.analysis_points) == 0:
+                    logger.warning(f"Point {point.point_number} was filtered out - has empty analysis_points list")
+            
+            # Calculate success metrics from filtered points
             successful_points = sum(
-                1 for point in analyzed_points 
+                1 for point in filtered_points 
                 if (len(point.analysis_points) > 0 and 
                     point.analysis_points[0].cause != "Не удалось провести автоматический анализ")
             )
             
             # Calculate validation metrics
-            validated_points = sum(1 for point in analyzed_points if len(point.analysis_points) > 0)
+            validated_points = len(filtered_points)
             invalidated_points = len(analyzed_points) - validated_points
             
-            total_points = len(analyzed_points)
+            total_points = len(filtered_points)
             total_duration = (datetime.now() - analysis_start).total_seconds()
             
             logger.info(
@@ -81,16 +99,16 @@ class AnalyzerService(RetryMixin):
                 f"Validation: {validated_points} kept, {invalidated_points} filtered out"
             )
             
-            # Create response
+            # Create response with filtered points
             all_analysis_points = []
-            for analyzed_point in analyzed_points:
+            for analyzed_point in filtered_points:
                 all_analysis_points.extend(analyzed_point.analysis_points)
             
             response = AnalyzeResponse(
-                document_points=analyzed_points,
+                document_points=filtered_points,
                 document_id=request.id,
                 document_metadata=document_metadata,
-                total_points=len(analyzed_points),
+                total_points=len(filtered_points),
                 analysis_timestamp=datetime.now().isoformat(),
                 points=all_analysis_points  # For backward compatibility
             )
@@ -255,7 +273,7 @@ class AnalyzerService(RetryMixin):
                 # Make LLM call with concurrency limit and timeout
                 llm_response = await concurrency_manager.with_llm_limit(
                     asyncio.wait_for(
-                        self._call_llm(prompt),
+                        self._call_llm(prompt, temperature=0.7),
                         timeout=settings.llm_timeout
                     )
                 )
@@ -263,21 +281,32 @@ class AnalyzerService(RetryMixin):
                 # Try to parse the response
                 analysis_points = self._parse_llm_response(llm_response)
                 
+                logger.info(f"Point {point_number}: Parsed {len(analysis_points)} analysis points from LLM response")
+                
                 # Check if parsing was successful (not default fallback)
-                if (analysis_points and 
-                    len(analysis_points) > 0 and 
-                    analysis_points[0].cause != "Не удалось провести автоматический анализ"):
-                    
-                    # Second LLM call for validation
-                    logger.info(f"Running validation for point {point_number}")
-                    validated_analysis = await self._validate_analysis_with_llm(
-                        analysis_points, 
-                        prompt,
-                        point_number
-                    )
-                    
-                    logger.info(f"Successfully validated analysis for point {point_number}")
-                    return validated_analysis
+                # FIXED: Empty arrays are valid responses, only treat actual error messages as failures
+                is_parsing_successful = (
+                    analysis_points is not None and 
+                    (len(analysis_points) == 0 or  # Empty array is valid (no issues found)
+                     analysis_points[0].cause != "Анализ не выполнен из-за технической ошибки")
+                )
+                
+                if is_parsing_successful:
+                    if len(analysis_points) > 0:
+                        # Second LLM call for validation only if there are actual analysis points
+                        logger.info(f"Running validation for point {point_number}")
+                        validated_analysis = await self._validate_analysis_with_llm(
+                            analysis_points, 
+                            prompt,
+                            point_number
+                        )
+                        
+                        logger.info(f"Point {point_number}: Validation completed, returning {len(validated_analysis)} analysis points")
+                        return validated_analysis
+                    else:
+                        # No issues found - skip validation and return empty list
+                        logger.info(f"Point {point_number}: No issues found, skipping validation")
+                        return []
                 else:
                     # Parsing failed, but this counts as a "parsing failure"
                     if attempt < max_attempts - 1:
@@ -321,6 +350,7 @@ class AnalyzerService(RetryMixin):
                     return self._get_default_analysis()
         
         # This shouldn't be reached, but just in case
+        logger.error(f"Point {point_number}: All {max_attempts} parsing attempts failed")
         return self._get_default_analysis()
 
     async def _validate_analysis_with_llm(
@@ -340,6 +370,8 @@ class AnalyzerService(RetryMixin):
         Returns:
             Validated analysis points (may return empty list if issues found)
         """
+        logger.info(f"Point {point_number}: Starting validation with {len(analysis_points)} analysis points")
+        
         try:
             # Create validation prompt
             validation_prompt = await self._create_validation_prompt(analysis_points, original_prompt)
@@ -347,24 +379,28 @@ class AnalyzerService(RetryMixin):
             # Make validation LLM call
             validation_response = await concurrency_manager.with_llm_limit(
                 asyncio.wait_for(
-                    self._call_llm(validation_prompt),
+                    self._call_llm(validation_prompt, temperature=0.3),
                     timeout=settings.llm_timeout
                 )
             )
             
+            logger.debug(f"Point {point_number}: Validation response: {validation_response[:200]}...")
+            
             # Parse validation response
             validation_result = self._parse_validation_response(validation_response)
             
+            logger.info(f"Point {point_number}: Validation result: is_valid={validation_result.get('is_valid')}")
+            
             if validation_result.get("is_valid", False):
-                logger.info(f"Point {point_number}: Analysis validated successfully")
+                logger.info(f"Point {point_number}: Analysis validated successfully - returning {len(analysis_points)} points")
                 return analysis_points
             else:
                 reason = validation_result.get("reason", "Unknown validation failure")
-                logger.info(f"Point {point_number}: Analysis invalidated - {reason}")
+                logger.info(f"Point {point_number}: Analysis invalidated - {reason} - returning empty list")
                 return []  # Return empty array for invalid analysis
                 
         except Exception as e:
-            logger.warning(f"Point {point_number}: Validation failed ({e}), keeping original analysis")
+            logger.warning(f"Point {point_number}: Validation failed ({e}), keeping original analysis with {len(analysis_points)} points")
             # If validation fails, keep original analysis rather than losing it
             return analysis_points
 
@@ -542,10 +578,11 @@ class AnalyzerService(RetryMixin):
 ]
 """
 
-    async def _call_llm(self, prompt: str) -> str:
+    async def _call_llm(self, prompt: str, temperature: float = 0.3) -> str:
         """Call LLM for analysis"""
         if self.openai_client is None:
-            return self._get_mock_response()
+            logger.error("OpenRouter client not initialized - cannot perform LLM analysis")
+            raise RuntimeError("LLM client not available - check OpenRouter configuration")
         
         def _sync_llm_call():
             try:
@@ -560,14 +597,13 @@ class AnalyzerService(RetryMixin):
                     extra_headers=extra_headers,
                     model=settings.openrouter_model,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                    max_tokens=2000
+                    temperature=temperature
                 )
                 
                 response_content = completion.choices[0].message.content
                 if not response_content:
-                    logger.warning("Empty response from OpenRouter, using mock response")
-                    return self._get_mock_response()
+                    logger.error("Empty response received from OpenRouter API")
+                    raise RuntimeError("Empty response from LLM service")
                 
                 logger.debug(f"LLM analysis completed. Response length: {len(response_content)}")
                 return response_content
@@ -576,14 +612,7 @@ class AnalyzerService(RetryMixin):
                 logger.error(f"OpenRouter API error: {e}")
                 raise e
         
-        try:
-            return await asyncio.to_thread(_sync_llm_call)
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            # Return mock response as fallback
-            return self._get_mock_response()
-
-
+        return await asyncio.to_thread(_sync_llm_call)
 
     def _parse_llm_response(self, llm_response: str) -> List[AnalysisPoint]:
         """Parse LLM response into AnalysisPoint objects"""
@@ -616,6 +645,7 @@ class AnalyzerService(RetryMixin):
                 logger.debug(f"LLM response is not a list: {type(analysis_data)}")
                 return self._get_default_analysis()
             
+            # Parse individual analysis points
             analysis_points = []
             for i, item in enumerate(analysis_data):
                 if isinstance(item, dict) and all(key in item for key in ['cause', 'risk', 'recommendation']):
@@ -627,33 +657,24 @@ class AnalyzerService(RetryMixin):
                 else:
                     logger.debug(f"Invalid analysis item {i}: missing required keys or not a dict")
             
-            if analysis_points:
-                logger.debug(f"Successfully parsed {len(analysis_points)} analysis points")
-                return analysis_points
+            # FIXED: Empty arrays are valid responses (no issues found), not parsing failures
+            if isinstance(analysis_data, list):  # Valid JSON array was parsed
+                logger.debug(f"Successfully parsed {len(analysis_points)} analysis points from {len(analysis_data)} items")
+                return analysis_points  # Can be empty list - that's valid!
             else:
-                logger.debug("No valid analysis points found in response")
+                logger.debug("No valid analysis array found in response")
                 return self._get_default_analysis()
             
         except Exception as e:
             logger.error(f"Unexpected error in LLM response parsing: {e}")
             return self._get_default_analysis()
 
-    def _get_mock_response(self) -> str:
-        """Return mock response when LLM is not available"""
-        return '''[
-  {
-    "cause": "Неопределенность в сроках исполнения обязательств",
-    "risk": "Средний риск споров о сроках и возможных штрафных санкций",
-    "recommendation": "Установить конкретные календарные даты или четкие критерии определения сроков исполнения"
-  }
-]'''
-
     def _get_default_analysis(self) -> List[AnalysisPoint]:
-        """Return default analysis when parsing fails"""
+        """Return explicit failure analysis when processing fails"""
         return [AnalysisPoint(
-            cause="Не удалось провести автоматический анализ",
-            risk="Неопределенный риск",
-            recommendation="Рекомендуется ручная проверка пункта юристом"
+            cause="Анализ не выполнен из-за технической ошибки",
+            risk="Неопределенный риск - требуется ручная проверка",
+            recommendation="Обратитесь к разработчику или проверьте пункт вручную"
         )]
 
     def _create_fallback_analysis(self, point) -> DocumentPointAnalysis:
