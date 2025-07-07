@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
@@ -9,8 +10,9 @@ from ..schemas.responses import RetrieveResponse, AnalyzeResponse, HealthRespons
 from ..services.analyzer_service import analyzer_service
 from ..services.embedding_service import embedding_service
 from ..services.retrieval_service import retrieval_service, DistanceFunction
+from ..services.export_service import export_service
 from ..core.config import settings
-from ..models.database import Rule, RuleChunk
+from ..models.database import Rule, RuleChunk, AnalysisResult
 import numpy as np
 from sklearn.metrics import silhouette_score
 
@@ -225,4 +227,57 @@ async def retrieval_metrics(db: Session = Depends(get_db)):
         silhouette_score=sil_score,
         eid=float(eid),
         dr=float(dr)
-    ) 
+    )
+
+
+# Export Endpoint
+
+@router.get("/export/{document_id}/pdf")
+async def export_analysis_pdf(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Export analysis results as PDF report
+    
+    Args:
+        document_id: Document identifier
+        
+    Returns:
+        PDF file with formatted analysis report
+    """
+    try:
+        logger.info(f"PDF export request for document: {document_id}")
+        
+        # Get analysis from database
+        analysis_result = db.query(AnalysisResult).filter(
+            AnalysisResult.document_id == document_id
+        ).first()
+        
+        if not analysis_result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis not found for this document"
+            )
+        
+        # Export as PDF
+        pdf_bytes = export_service.export_analysis_pdf(
+            analysis_result.analysis_points
+        )
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=analysis_report_{document_id}.pdf"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting PDF for document {document_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during PDF export"
+        ) 

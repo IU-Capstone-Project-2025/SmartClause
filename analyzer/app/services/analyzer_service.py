@@ -9,6 +9,7 @@ from ..schemas.requests import AnalyzeRequest, RetrieveRequest
 from ..schemas.responses import (
     AnalysisPoint, AnalyzeResponse, DocumentPointAnalysis
 )
+from ..models.database import AnalysisResult
 from .embedding_service import embedding_service
 from .document_parser import document_parser
 from .retrieval_service import retrieval_service
@@ -80,7 +81,7 @@ class AnalyzerService(RetryMixin):
             for analyzed_point in analyzed_points:
                 all_analysis_points.extend(analyzed_point.analysis_points)
             
-            return AnalyzeResponse(
+            response = AnalyzeResponse(
                 document_points=analyzed_points,
                 document_id=request.id,
                 document_metadata=document_metadata,
@@ -89,6 +90,8 @@ class AnalyzerService(RetryMixin):
                 points=all_analysis_points  # For backward compatibility
             )
             
+            return response
+       
         except Exception as e:
             total_duration = (datetime.now() - analysis_start).total_seconds()
             logger.error(f"Failed to analyze document after {total_duration:.2f}s: {e}")
@@ -364,7 +367,7 @@ class AnalyzerService(RetryMixin):
                     extra_headers=extra_headers,
                     model=settings.openrouter_model,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3,
+                    temperature=0.0,
                     max_tokens=2000
                 )
                 

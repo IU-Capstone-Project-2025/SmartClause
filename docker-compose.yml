@@ -19,7 +19,6 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      - ./analyzer:/app
       - ./datasets:/app/scripts/datasets
     env_file:
       - ./analyzer/.env
