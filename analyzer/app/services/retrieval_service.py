@@ -22,7 +22,7 @@ class DistanceFunction(Enum):
 class RetrievalService:
     """Service for basic distance-based document retrieval"""
     
-    def __init__(self, default_distance_function: DistanceFunction = DistanceFunction.COSINE):
+    def __init__(self, default_distance_function: DistanceFunction = DistanceFunction.L2):
         self.default_distance_function = default_distance_function
     
     async def retrieve_rules(
