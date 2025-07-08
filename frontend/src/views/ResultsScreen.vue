@@ -2,6 +2,12 @@
   <div class="results-screen">
     <div class="results-header">
       <h2>Analysis Results</h2>
+      <div class="header-controls">
+        <button class="chat-button" @click="goToChat">
+          <MessageCircleIcon class="chat-icon" />
+          <span>Ask a question about the document</span>
+        </button>
+      </div>
       <div class="file-info-bar">
         <span class="file-name">{{ fileName }}</span>
         <div class="status">
@@ -33,8 +39,13 @@
 </template>
 
 <script>
+import { MessageCircle as MessageCircleIcon } from 'lucide-vue-next';
+
 export default {
   name: 'ResultsScreen',
+  components: {
+    MessageCircleIcon
+  },
   data() {
     return {
       activeIndex: null,
@@ -59,6 +70,9 @@ export default {
     }
   },
   methods: {
+    goToChat() {
+      this.$router.push('/spaces/1');
+    },
     toggleResult(index) {
       this.activeIndex = this.activeIndex === index ? null : index;
     },
@@ -99,6 +113,30 @@ export default {
     font-size: 36px;
     font-weight: 700;
     margin-bottom: 30px;
+}
+
+.header-controls {
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.chat-button {
+  background-color: #4a90e2;
+  color: #ffffff;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  transition: background-color 0.3s;
+  font-family: 'Inter', sans-serif;
+  display: inline-flex;
+  gap: 10px;
+}
+
+.chat-button:hover {
+  background-color: #357abd;
 }
 
 .file-info-bar {
@@ -216,5 +254,10 @@ export default {
 
 .result-content p {
   white-space: pre-wrap;
+}
+
+.chat-icon {
+  width: 20px;
+  height: 20px;
 }
 </style> 
