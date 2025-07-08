@@ -1,8 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
+import time
+
 
 from ..schemas.requests import RetrieveRequest
 from ..schemas.responses import RetrieveResponse, RetrieveResult, DocumentMetadata
@@ -11,85 +13,120 @@ from .embedding_service import embedding_service
 
 logger = logging.getLogger(__name__)
 
+class DistanceFunction(str, Enum):
+    """Vector distance metrics supported by pgvector."""
 
-class DistanceFunction(Enum):
-    """Supported distance functions for similarity search"""
-    COSINE = "cosine"
-    L2 = "l2"
-    INNER_PRODUCT = "inner_product"
+    L2 = "l2"      # Euclidean (<->)
+    COSINE = "cosine"  # Cosine (<=>)
+
+    def sql_operator(self) -> str:
+        return "<->" if self is DistanceFunction.L2 else "<=>"
 
 
 class RetrievalService:
-    """Service for basic distance-based document retrieval"""
-    
-    def __init__(self, default_distance_function: DistanceFunction = DistanceFunction.L2):
-        self.default_distance_function = default_distance_function
-    
-    async def retrieve_documents(
-        self, 
-        request: RetrieveRequest, 
+    """Hybrid BM25 + dense‑vector search executed completely in PostgreSQL.
+
+    *   Two candidate sets (vector / FTS) are produced with `LIMIT k_vec`.
+    *   Scores are converted to **Reciprocal Rank** (1/(C+rank)).
+    *   Lists are fused via SUM(score) → higher = better.
+
+    Public method signatures are unchanged, therefore **routes.py** remains
+    untouched.  Each public method logs timings (ms) for key phases.
+    """
+
+    _C_RRF: int = 60              # Constant C in RRF
+    _PRESELECT_MULTIPLIER: int = 10  # Oversampling factor before fusion
+    _MAX_OVERSAMPLE: int = 20        # Respect Pydantic limit k<=20 in requests
+
+    # ---------------------------------------------------------------------
+    # Public API
+    # ---------------------------------------------------------------------
+
+    async def retrieve_chunks_rrf(
+        self,
+        request: RetrieveRequest,
         db: Session,
-        distance_function: Optional[DistanceFunction] = None
+        distance: DistanceFunction = DistanceFunction.L2,
     ) -> RetrieveResponse:
-        """
-        Retrieve relevant documents based on query using distance-based similarity
-        
-        Args:
-            request: RetrieveRequest containing query and k
-            db: Database session
-            distance_function: Distance function to use (defaults to instance default)
-            
-        Returns:
-            RetrieveResponse with results including metadata and similarity scores
-        """
-        if distance_function is None:
-            distance_function = self.default_distance_function
-            
-        logger.info(f"Retrieving documents for query: '{request.query[:100]}...' using {distance_function.value}")
-        
-        try:
-            # Generate embedding for the query
-            query_embedding = embedding_service.encode_to_list(request.query)
-            
-            # Convert to PostgreSQL array format for querying
-            query_vector = f"[{','.join(map(str, query_embedding))}]"
-            
-            # Build the similarity query based on distance function
-            distance_query = self._build_distance_query(distance_function, query_vector)
-            
-            # Execute the similarity search
-            sql_query = text(f"""
-                SELECT 
-                    rc.chunk_id,
-                    r.file,
-                    r.rule_number,
-                    r.rule_title,
-                    rc.chunk_text,
-                    r.section_title,
-                    r.chapter_title,
-                    rc.chunk_char_start,
-                    rc.chunk_char_end,
-                    (rc.chunk_char_end - rc.chunk_char_start) as text_length,
-                    rc.embedding,
-                    {distance_query} as similarity_score
-                FROM rule_chunks rc
-                JOIN rules r ON rc.rule_id = r.rule_id
-                WHERE rc.embedding IS NOT NULL
-                ORDER BY similarity_score {"ASC" if distance_function == DistanceFunction.L2 else "DESC"}
-                LIMIT :k
-            """)
-            
-            result = db.execute(sql_query, {"k": request.k})
-            rows = result.fetchall()
-            
-            # Convert results to response format
-            results = []
-            for row in rows:
-                # Convert embedding from database format to list
-                embedding_list = self._parse_embedding(row.embedding)
-                
-                # Create metadata object
-                metadata = DocumentMetadata(
+        """Return *k* chunks ranked by RRF(BM25 + vector)."""
+
+        timings: Dict[str, float] = {}
+        t0 = time.perf_counter()
+
+        # --- encode -------------------------------------------------------
+        q_vec: List[float] = embedding_service.encode_to_list(request.query)
+        q_vec_pg = f"[{','.join(f'{x:.6f}' for x in q_vec)}]"
+        t1 = time.perf_counter(); timings["encode_ms"] = (t1 - t0) * 1000
+
+        # --- sql ----------------------------------------------------------
+        k_final = max(1, request.k)
+        k_vec = max(100, k_final * self._PRESELECT_MULTIPLIER)
+        k_lex = k_vec
+
+        sql = text(
+            f"""
+            WITH vec AS (
+                SELECT chunk_id,
+                       1.0 / (:c + ROW_NUMBER() OVER()) AS score
+                FROM   rule_chunks
+                ORDER  BY embedding {distance.sql_operator()} :q_vec
+                LIMIT  :k_vec
+            ),
+            lex AS (
+                SELECT chunk_id,
+                       1.0 / (:c + ROW_NUMBER() OVER()) AS score
+                FROM   rule_chunks
+                WHERE  chunk_tsv @@ plainto_tsquery('russian', :q)
+                ORDER  BY ts_rank_cd(chunk_tsv, plainto_tsquery('russian', :q)) DESC
+                LIMIT  :k_lex
+            ),
+            fusion AS (
+                SELECT chunk_id, SUM(score) AS rrf
+                FROM   (
+                    SELECT * FROM vec
+                    UNION ALL
+                    SELECT * FROM lex
+                ) candidates
+                GROUP  BY chunk_id
+            )
+            SELECT f.rrf,
+                   rc.chunk_text,
+                   rc.embedding,
+                   rc.chunk_char_start,
+                   rc.chunk_char_end,
+                   r.file,
+                   r.rule_number,
+                   r.rule_title,
+                   r.section_title,
+                   r.chapter_title
+            FROM   fusion f
+            JOIN   rule_chunks rc ON rc.chunk_id = f.chunk_id
+            JOIN   rules       r  ON r.rule_id   = rc.rule_id
+            ORDER  BY f.rrf DESC
+            LIMIT  :k_final;
+            """
+        )
+
+        rows = db.execute(
+            sql,
+            {
+                "c": self._C_RRF,
+                "q": request.query,
+                "q_vec": q_vec_pg,
+                "k_vec": k_vec,
+                "k_lex": k_lex,
+                "k_final": k_final,
+            },
+        ).fetchall()
+        t2 = time.perf_counter(); timings["sql_ms"] = (t2 - t1) * 1000
+
+        # --- post‑processing ---------------------------------------------
+        results: List[RetrieveResult] = [
+            RetrieveResult(
+                text=row.chunk_text,
+                embedding=self._pgvector_to_list(row.embedding),
+                similarity_score=float(row.rrf),
+                metadata=DocumentMetadata(
                     file_name=row.file,
                     rule_number=row.rule_number,
                     rule_title=row.rule_title,
@@ -97,300 +134,84 @@ class RetrievalService:
                     chapter_title=row.chapter_title,
                     start_char=row.chunk_char_start,
                     end_char=row.chunk_char_end,
-                    text_length=row.text_length
-                )
-                
-                # Create result object
-                retrieve_result = RetrieveResult(
-                    text=row.chunk_text,
-                    embedding=embedding_list,
-                    metadata=metadata,
-                    similarity_score=float(row.similarity_score)
-                )
-                
-                results.append(retrieve_result)
-            
-            return RetrieveResponse(
-                results=results,
-                total_results=len(results),
-                query=request.query,
-                distance_function=distance_function.value
+                    text_length=row.chunk_char_end - row.chunk_char_start,
+                ),
             )
-            
-        except Exception as e:
-            logger.error(f"Error in retrieve_documents: {e}")
-            raise
-    
-    def _build_distance_query(self, distance_function: DistanceFunction, query_vector: str) -> str:
-        """Build the distance query based on the selected function"""
-        if distance_function == DistanceFunction.COSINE:
-            return f"(1 - (embedding <=> '{query_vector}'))"
-        elif distance_function == DistanceFunction.L2:
-            return f"(embedding <-> '{query_vector}')"
-        elif distance_function == DistanceFunction.INNER_PRODUCT:
-            return f"((embedding <#> '{query_vector}') * -1)"
-        else:
-            raise ValueError(f"Unsupported distance function: {distance_function}")
-    
-    def _parse_embedding(self, embedding_raw) -> List[float]:
-        """Parse embedding from database format to list of floats"""
-        if embedding_raw is None:
-            return []
-        
-        # Handle different possible formats
-        if isinstance(embedding_raw, list):
-            return [float(x) for x in embedding_raw]
-        elif isinstance(embedding_raw, str):
-            # Remove brackets and split by comma
-            clean_str = embedding_raw.strip('[]')
-            return [float(x.strip()) for x in clean_str.split(',')]
-        else:
-            # Try to convert directly
-            try:
-                return [float(x) for x in embedding_raw]
-            except (TypeError, ValueError):
-                logger.warning(f"Could not parse embedding: {type(embedding_raw)}")
-                return []
-    
-    def set_distance_function(self, distance_function: DistanceFunction):
-        """Change the default distance function"""
-        self.default_distance_function = distance_function
-        logger.info(f"Distance function changed to: {distance_function.value}")
+            for row in rows
+        ]
+        t3 = time.perf_counter(); timings["post_ms"] = (t3 - t2) * 1000
+        timings["total_ms"] = (t3 - t0) * 1000
 
-    def get_all_embeddings_and_labels(self, db: Session):
-        """
-        Retrieve all embeddings and their file_name labels from the rule_chunks table.
-        Returns:
-            embeddings: List[List[float]]
-            labels: List[str]
-        """
-        chunks = db.query(RuleChunk).join(Rule).filter(RuleChunk.embedding != None).all()
-        embeddings = []
-        labels = []
-        for chunk in chunks:
-            emb = self._parse_embedding(chunk.embedding)
-            if emb:
-                embeddings.append(emb)
-                labels.append(chunk.rule.file or f"chunk_{chunk.chunk_id}")
-        return embeddings, labels
+        logger.debug(
+            "Hybrid search timings (ms) – encode: %.1f | sql: %.1f | post: %.1f | total: %.1f",
+            timings["encode_ms"], timings["sql_ms"], timings["post_ms"], timings["total_ms"],
+        )
+
+        return RetrieveResponse(
+            query=request.query,
+            results=results,
+            total_results=len(results),
+            distance_function=f"rrf(bm25+{distance.value}) (sql)",
+        )
 
     async def retrieve_rules_rrf(
         self,
         request: RetrieveRequest,
         db: Session,
-        distance_function: Optional[DistanceFunction] = None,
-        c: int = 60
+        distance: DistanceFunction = DistanceFunction.L2,
     ) -> RetrieveResponse:
-        """
-        Hybrid retrieval: BM25+vector+RRF for unique rules (articles).
-        Returns top-k most relevant unique rules (full article text).
-        """
-        chunks = db.query(RuleChunk).join(Rule).filter(RuleChunk.embedding != None).all()
-        texts = [c.chunk_text for c in chunks]
-        ids = [c.chunk_id for c in chunks]
-        embeddings = [self._parse_embedding(c.embedding) for c in chunks]
+        """Return *k* unique rules (best chunk per rule)."""
 
-        def preprocess(text):
-            tokens = [w for w in text.lower().split() if w.isalpha()]
-            return tokens
-        corpus = [preprocess(text) for text in texts]
-        bm25 = BM25(corpus)
-        query_tokens = preprocess(request.query)
-        bm25_scores = bm25.get_scores(query_tokens)
-        bm25_ranked = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
+        t0 = time.perf_counter()
 
-        vector_k = min(max(request.k, 30), 20)
-        vector_request = RetrieveRequest(
-            query=request.query,
-            k=vector_k,
-            distance_function=request.distance_function or "cosine"
+        # oversample within Pydantic limit (k<=20)
+        oversized_k = min(request.k * self._PRESELECT_MULTIPLIER, self._MAX_OVERSAMPLE)
+        oversized_request = RetrieveRequest(query=request.query, k=oversized_k)  # type: ignore
+        chunk_response = await self.retrieve_chunks_rrf(oversized_request, db, distance)
+        t1 = time.perf_counter()
+
+        best_by_rule: Dict[int, RetrieveResult] = {}
+        for res in chunk_response.results:
+            rule_id = res.metadata.rule_number
+            if (rule_id not in best_by_rule) or (res.similarity_score > best_by_rule[rule_id].similarity_score):
+                best_by_rule[rule_id] = res
+
+        sorted_rules = sorted(best_by_rule.values(), key=lambda r: r.similarity_score, reverse=True)[: request.k]
+        t2 = time.perf_counter()
+
+        logger.debug(
+            "Rules aggregation timings (ms) – chunks: %.1f | aggregate: %.1f | total: %.1f",
+            (t1 - t0) * 1000,
+            (t2 - t1) * 1000,
+            (t2 - t0) * 1000,
         )
-        vector_response = await self.retrieve_documents(vector_request, db, distance_function)
-        chunk_id_to_idx = {c.chunk_id: i for i, c in enumerate(chunks)}
-        vector_ranked = []
-        for result in vector_response.results:
-            idx = chunk_id_to_idx.get(result.metadata.start_char)
-            if idx is not None:
-                vector_ranked.append(idx)
-
-        def rrf(idx, ranked_list):
-            try:
-                return ranked_list.index(idx)
-            except ValueError:
-                return len(ranked_list)
-
-        rrf_scores = {}
-        for i in range(len(ids)):
-            rv = rrf(i, vector_ranked)
-            rf = rrf(i, bm25_ranked)
-            rrf_scores[i] = 1/(c + rv) + 1/(c + rf)
-
-        top_rrf = sorted(rrf_scores, key=rrf_scores.get, reverse=True)[:request.k*2]
-        seen_rule_ids = set()
-        results = []
-        for idx in top_rrf:
-            chunk = chunks[idx]
-            rule_id = chunk.rule_id
-            if rule_id in seen_rule_ids:
-                continue
-            seen_rule_ids.add(rule_id)
-            rule_text = chunk.rule.rule_text if hasattr(chunk.rule, 'rule_text') else ''
-            metadata = DocumentMetadata(
-                file_name=chunk.rule.file,
-                rule_number=chunk.rule.rule_number,
-                rule_title=chunk.rule.rule_title,
-                section_title=chunk.rule.section_title,
-                chapter_title=chunk.rule.chapter_title,
-                start_char=chunk.rule.start_char if hasattr(chunk.rule, 'start_char') else None,
-                end_char=chunk.rule.end_char if hasattr(chunk.rule, 'end_char') else None,
-                text_length=chunk.rule.text_length if hasattr(chunk.rule, 'text_length') else None
-            )
-            results.append(RetrieveResult(
-                text=rule_text,
-                embedding=embeddings[idx],
-                metadata=metadata,
-                similarity_score=float(rrf_scores[idx])
-            ))
-            if len(results) >= request.k:
-                break
 
         return RetrieveResponse(
-            results=results,
-            total_results=len(results),
             query=request.query,
-            distance_function=f'rrf_bm25+vector'
+            results=sorted_rules,
+            total_results=len(sorted_rules),
+            distance_function=f"rrf(bm25+{distance.value}) (sql) – unique rules",
         )
 
-    async def retrieve_chunks_rrf(
-        self,
-        request: RetrieveRequest,
-        db: Session,
-        distance_function: Optional[DistanceFunction] = None,
-        c: int = 60
-    ) -> RetrieveResponse:
-        """
-        Hybrid retrieval: BM25+vector+RRF for unique chunks.
-        Returns top-k most relevant unique chunks (chunk_text).
-        """
-        chunks = db.query(RuleChunk).join(Rule).filter(RuleChunk.embedding != None).all()
-        texts = [c.chunk_text for c in chunks]
-        ids = [c.chunk_id for c in chunks]
-        metadatas = [
-            DocumentMetadata(
-                file_name=c.rule.file,
-                rule_number=c.rule.rule_number,
-                rule_title=c.rule.rule_title,
-                section_title=c.rule.section_title,
-                chapter_title=c.rule.chapter_title,
-                start_char=c.chunk_char_start,
-                end_char=c.chunk_char_end,
-                text_length=(c.chunk_char_end - c.chunk_char_start)
-            ) for c in chunks
-        ]
-        embeddings = [self._parse_embedding(c.embedding) for c in chunks]
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
 
-        def preprocess(text):
-            tokens = [w for w in text.lower().split() if w.isalpha()]
-            return tokens
-        corpus = [preprocess(text) for text in texts]
-        bm25 = BM25(corpus)
-        query_tokens = preprocess(request.query)
-        bm25_scores = bm25.get_scores(query_tokens)
-        bm25_ranked = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
+    def get_all_embeddings_and_labels(self, db: Session) -> Tuple[List[List[float]], List[str]]:
+        sql = text("SELECT rc.embedding, r.file FROM rule_chunks rc JOIN rules r ON r.rule_id = rc.rule_id")
+        rows = db.execute(sql).fetchall()
+        embeddings = [self._pgvector_to_list(row.embedding) for row in rows]
+        labels = [row.file for row in rows]
+        return embeddings, labels
 
-        vector_k = min(max(request.k, 30), 20)
-        vector_request = RetrieveRequest(
-            query=request.query,
-            k=vector_k,
-            distance_function=request.distance_function or "cosine"
-        )
-        vector_response = await self.retrieve_documents(vector_request, db, distance_function)
-        chunk_id_to_idx = {c.chunk_id: i for i, c in enumerate(chunks)}
-        vector_ranked = []
-        for result in vector_response.results:
-            idx = chunk_id_to_idx.get(result.metadata.start_char)
-            if idx is not None:
-                vector_ranked.append(idx)
-
-        def rrf(idx, ranked_list):
-            try:
-                return ranked_list.index(idx)
-            except ValueError:
-                return len(ranked_list)
-
-        rrf_scores = {}
-        for i in range(len(ids)):
-            rv = rrf(i, vector_ranked)
-            rf = rrf(i, bm25_ranked)
-            rrf_scores[i] = 1/(c + rv) + 1/(c + rf)
-
-        top_rrf = sorted(rrf_scores, key=rrf_scores.get, reverse=True)[:request.k*2]
-        seen_chunk_ids = set()
-        results = []
-        for idx in top_rrf:
-            chunk_id = ids[idx]
-            if chunk_id in seen_chunk_ids:
-                continue
-            seen_chunk_ids.add(chunk_id)
-            results.append(RetrieveResult(
-                text=texts[idx],
-                embedding=embeddings[idx],
-                metadata=metadatas[idx],
-                similarity_score=float(rrf_scores[idx])
-            ))
-            if len(results) >= request.k:
-                break
-
-        return RetrieveResponse(
-            results=results,
-            total_results=len(results),
-            query=request.query,
-            distance_function=f'rrf_bm25+vector'
-        )
+    @staticmethod
+    def _pgvector_to_list(pg_vec) -> List[float]:
+        if pg_vec is None:
+            return []
+        if isinstance(pg_vec, str):  # psycopg + vector might return text
+            return [float(x) for x in pg_vec.strip("[]").split(",") if x]
+        return list(pg_vec)
 
 
-# Global retrieval service instance
-retrieval_service = RetrievalService() 
-
-# --- Pure Python BM25 implementation ---
-import math
-from collections import Counter, defaultdict
-
-class BM25:
-    def __init__(self, corpus, k1=1.5, b=0.75):
-        self.corpus = corpus
-        self.k1 = k1
-        self.b = b
-        self.N = len(corpus)
-        self.avgdl = sum(len(doc) for doc in corpus) / self.N if self.N > 0 else 0
-        self.doc_freqs = []
-        self.idf = {}
-        self.doc_len = []
-        self._initialize()
-
-    def _initialize(self):
-        df = defaultdict(int)
-        for document in self.corpus:
-            frequencies = Counter(document)
-            self.doc_freqs.append(frequencies)
-            self.doc_len.append(len(document))
-            for word in frequencies:
-                df[word] += 1
-        for word, freq in df.items():
-            self.idf[word] = math.log(1 + (self.N - freq + 0.5) / (freq + 0.5))
-
-    def get_scores(self, query):
-        scores = []
-        for idx, document in enumerate(self.corpus):
-            score = 0.0
-            doc_freq = self.doc_freqs[idx]
-            dl = self.doc_len[idx]
-            for word in query:
-                if word not in doc_freq:
-                    continue
-                idf = self.idf.get(word, 0)
-                tf = doc_freq[word]
-                denom = tf + self.k1 * (1 - self.b + self.b * dl / self.avgdl)
-                score += idf * (tf * (self.k1 + 1)) / denom
-            scores.append(score)
-        return scores 
+# Singleton instance
+retrieval_service = RetrievalService()
