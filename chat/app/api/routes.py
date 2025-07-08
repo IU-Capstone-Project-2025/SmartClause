@@ -217,6 +217,11 @@ async def send_message(
         # Extract user ID
         user_id = await extract_user_id_from_header(authorization)
         
+        # Extract JWT token for service calls
+        auth_token = None
+        if authorization and authorization.startswith("Bearer "):
+            auth_token = authorization[7:]  # Remove "Bearer " prefix
+        
         logger.info(f"Processing message from user {user_id} in space {space_id}")
         
         # Save user message
@@ -236,12 +241,13 @@ async def send_message(
             db=db
         )
         
-        # Generate assistant response
+        # Generate assistant response with JWT token
         response_text, response_metadata = await llm_service.generate_response(
             user_message=request.content,
             conversation_history=conversation_history,
             space_id=space_id,
-            user_id=user_id
+            user_id=user_id,
+            auth_token=auth_token
         )
         
         # Save assistant message
@@ -264,7 +270,7 @@ async def send_message(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error sending message to space {space_id}: {e}")
+        logger.error(f"Error processing message for space {space_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while processing message"

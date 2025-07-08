@@ -32,7 +32,8 @@ class LLMService:
         user_message: str,
         conversation_history: List[Message],
         space_id: str,
-        user_id: str
+        user_id: str,
+        auth_token: str = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Generate an assistant response to the user message
@@ -42,6 +43,7 @@ class LLMService:
             conversation_history: Previous messages for context
             space_id: Space ID for context
             user_id: User ID
+            auth_token: JWT token for service authentication
             
         Returns:
             Tuple of (response_text, metadata)
@@ -51,11 +53,12 @@ class LLMService:
             context = await retrieval_service.get_combined_context(
                 query=user_message,
                 k_rules=3,
-                k_chunks=3
+                k_chunks=3,
+                auth_token=auth_token
             )
             
             # Get document analysis context from the same space
-            space_documents = await document_service.get_space_documents_with_analysis(space_id, user_id)
+            space_documents = await document_service.get_space_documents_with_analysis(space_id, user_id, auth_token)
             document_analysis_context = document_service.format_analysis_for_llm(space_documents)
             
             # Format conversation history for LLM

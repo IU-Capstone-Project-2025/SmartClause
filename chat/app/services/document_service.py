@@ -14,20 +14,26 @@ class DocumentService:
         self.backend_base_url = "http://backend:8000/api"
         self.timeout = httpx.Timeout(30.0)
     
-    async def get_documents_in_space(self, space_id: str, user_id: str) -> List[Dict[str, Any]]:
+    async def get_documents_in_space(self, space_id: str, user_id: str, auth_token: str = None) -> List[Dict[str, Any]]:
         """
         Get all documents in a space from the backend service
         
         Args:
             space_id: Space UUID
             user_id: User ID for authorization
+            auth_token: JWT token for authorization
             
         Returns:
             List of document objects
         """
         try:
             url = f"{self.backend_base_url}/spaces/{space_id}/documents"
-            headers = {"Authorization": f"Bearer {user_id}"}  # Using user_id as token for now
+            
+            # Use the actual JWT token if provided, otherwise fallback to user_id (for backward compatibility)
+            if auth_token:
+                headers = {"Authorization": f"Bearer {auth_token}"}
+            else:
+                headers = {"Authorization": f"Bearer {user_id}"}  # Fallback for now
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Fetching documents from {url} for space {space_id}")
@@ -50,20 +56,26 @@ class DocumentService:
             logger.error(f"Error fetching documents: {e}")
             return []
     
-    async def get_document_analysis(self, document_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_document_analysis(self, document_id: str, user_id: str, auth_token: str = None) -> Optional[Dict[str, Any]]:
         """
         Get analysis results for a specific document
         
         Args:
             document_id: Document UUID
             user_id: User ID for authorization
+            auth_token: JWT token for authorization
             
         Returns:
             Analysis data or None if not found
         """
         try:
             url = f"{self.backend_base_url}/documents/{document_id}/analysis"
-            headers = {"Authorization": f"Bearer {user_id}"}
+            
+            # Use the actual JWT token if provided, otherwise fallback to user_id
+            if auth_token:
+                headers = {"Authorization": f"Bearer {auth_token}"}
+            else:
+                headers = {"Authorization": f"Bearer {user_id}"}
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Fetching analysis from {url} for document {document_id}")
@@ -88,20 +100,21 @@ class DocumentService:
             logger.error(f"Error fetching document analysis: {e}")
             return None
     
-    async def get_space_documents_with_analysis(self, space_id: str, user_id: str) -> Dict[str, Any]:
+    async def get_space_documents_with_analysis(self, space_id: str, user_id: str, auth_token: str = None) -> Dict[str, Any]:
         """
         Get all documents in a space along with their analysis results
         
         Args:
             space_id: Space UUID
             user_id: User ID for authorization
+            auth_token: JWT token for authorization
             
         Returns:
             Dictionary with documents and their analysis data
         """
         try:
             # Get all documents in the space
-            documents = await self.get_documents_in_space(space_id, user_id)
+            documents = await self.get_documents_in_space(space_id, user_id, auth_token)
             
             if not documents:
                 return {"documents": [], "total_documents": 0, "analyzed_documents": 0}
@@ -121,7 +134,7 @@ class DocumentService:
                 
                 # Only fetch analysis for completed documents
                 if doc.get("status") == "completed":
-                    analysis = await self.get_document_analysis(doc.get("id"), user_id)
+                    analysis = await self.get_document_analysis(doc.get("id"), user_id, auth_token)
                     if analysis:
                         doc_data["analysis"] = analysis
                         analyzed_count += 1

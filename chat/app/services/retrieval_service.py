@@ -43,7 +43,8 @@ class RetrievalService:
         self,
         query: str,
         k: int = 5,
-        distance_function: str = "cosine"
+        distance_function: str = "cosine",
+        auth_token: str = None
     ) -> Optional[RetrieveResponse]:
         """
         Retrieve legal context from analyzer microservice using /retrieve-rules endpoint
@@ -52,6 +53,7 @@ class RetrievalService:
             query: Search query for legal context
             k: Number of results to retrieve
             distance_function: Distance function to use
+            auth_token: JWT token for authorization
             
         Returns:
             RetrieveResponse or None if error
@@ -65,12 +67,18 @@ class RetrievalService:
             
             url = f"{self.analyzer_base_url}/retrieve-rules"
             
+            # Set up headers with authentication if token is provided
+            headers = {"Content-Type": "application/json"}
+            if auth_token:
+                headers["Authorization"] = f"Bearer {auth_token}"
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Requesting legal context from {url} with query: '{query[:50]}...'")
                 
                 response = await client.post(
                     url,
-                    json=request_data.dict()
+                    json=request_data.dict(),
+                    headers=headers
                 )
                 
                 if response.status_code == 200:
@@ -93,7 +101,8 @@ class RetrievalService:
         self,
         query: str,
         k: int = 5,
-        distance_function: str = "cosine"
+        distance_function: str = "cosine",
+        auth_token: str = None
     ) -> Optional[RetrieveResponse]:
         """
         Retrieve document chunks from analyzer microservice using /retrieve-chunk endpoint
@@ -102,6 +111,7 @@ class RetrievalService:
             query: Search query for document chunks
             k: Number of results to retrieve
             distance_function: Distance function to use
+            auth_token: JWT token for authorization
             
         Returns:
             RetrieveResponse or None if error
@@ -115,12 +125,18 @@ class RetrievalService:
             
             url = f"{self.analyzer_base_url}/retrieve-chunk"
             
+            # Set up headers with authentication if token is provided
+            headers = {"Content-Type": "application/json"}
+            if auth_token:
+                headers["Authorization"] = f"Bearer {auth_token}"
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Requesting document chunks from {url} with query: '{query[:50]}...'")
                 
                 response = await client.post(
                     url,
-                    json=request_data.dict()
+                    json=request_data.dict(),
+                    headers=headers
                 )
                 
                 if response.status_code == 200:
@@ -143,7 +159,8 @@ class RetrievalService:
         self,
         query: str,
         k_rules: int = 3,
-        k_chunks: int = 3
+        k_chunks: int = 3,
+        auth_token: str = None
     ) -> Dict[str, Any]:
         """
         Get combined context from both legal rules and document chunks
@@ -152,14 +169,15 @@ class RetrievalService:
             query: Search query
             k_rules: Number of legal rules to retrieve
             k_chunks: Number of document chunks to retrieve
+            auth_token: JWT token for authorization
             
         Returns:
             Dictionary with legal and document context
         """
         try:
             # Retrieve both legal rules and document chunks in parallel
-            legal_task = self.retrieve_legal_context(query, k_rules)
-            chunks_task = self.retrieve_document_chunks(query, k_chunks)
+            legal_task = self.retrieve_legal_context(query, k_rules, auth_token=auth_token)
+            chunks_task = self.retrieve_document_chunks(query, k_chunks, auth_token=auth_token)
             
             legal_response, chunks_response = await asyncio.gather(
                 legal_task, chunks_task, return_exceptions=True
