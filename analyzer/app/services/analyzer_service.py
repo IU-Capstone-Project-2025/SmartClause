@@ -9,6 +9,7 @@ from ..schemas.requests import AnalyzeRequest, RetrieveRequest
 from ..schemas.responses import (
     AnalysisPoint, AnalyzeResponse, DocumentPointAnalysis
 )
+from ..models.database import AnalysisResult
 from .embedding_service import embedding_service
 from .document_parser import document_parser
 from .retrieval_service import retrieval_service
@@ -32,7 +33,7 @@ class AnalyzerService(RetryMixin):
             logger.error("OpenRouter API key not found. Analysis will fail without proper LLM configuration.")
             raise ValueError("OpenRouter API key is required for analysis functionality")
     
-    async def analyze_document(self, request: AnalyzeRequest, db: Session) -> AnalyzeResponse:
+    async def analyze_document(self, request: AnalyzeRequest, db: Session, user_id: str) -> AnalyzeResponse:
         """Analyze document for legal risks and recommendations with concurrent processing"""
         logger.info(f"Analyzing document with ID: {request.id}")
         
@@ -112,6 +113,21 @@ class AnalyzerService(RetryMixin):
                 analysis_timestamp=datetime.now().isoformat(),
                 points=all_analysis_points  # For backward compatibility
             )
+            
+            # Save analysis results to database with user context
+            try:
+                analysis_result = AnalysisResult(
+                    document_id=request.id,
+                    user_id=user_id,
+                    analysis_points=response.dict()  # Store the full response as JSON
+                )
+                db.add(analysis_result)
+                db.commit()
+                logger.info(f"Analysis results saved to database for document {request.id}, user {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to save analysis results to database: {e}")
+                db.rollback()
+                # Continue execution even if database save fails
             
             return response
        

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, Header
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List
+from typing import List, Optional
 import logging
 from ..core.database import get_db, engine
 from ..schemas.requests import RetrieveRequest, AnalyzeRequest, EmbedRequest
@@ -13,6 +13,7 @@ from ..services.retrieval_service import retrieval_service, DistanceFunction
 from ..services.export_service import export_service
 from ..core.config import settings
 from ..models.database import Rule, RuleChunk, AnalysisResult
+from ..utils.auth_utils import auth_utils
 import numpy as np
 from sklearn.metrics import silhouette_score
 
@@ -43,13 +44,18 @@ async def health_check():
 @router.post("/retrieve-chunk", response_model=RetrieveResponse)
 async def retrieve_chunks(
     request: RetrieveRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
 ):
     """
     Retrieve relevant document chunks based on query using hybrid BM25+vector+RRF search (unique chunks).
+    Requires authentication via Bearer token.
     """
     try:
-        logger.info(f"Retrieve chunks request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
+        # Require authentication
+        user_id = await auth_utils.require_authentication(authorization)
+        
+        logger.info(f"Retrieve chunks request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}, user='{user_id}'")
         if request.k > settings.max_k:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,16 +83,21 @@ async def retrieve_chunks(
 async def analyze_document(
     id: str = Form(..., description="Document identifier"),
     file: UploadFile = File(..., description="Document file to analyze"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
 ):
     """
     Analyze a document for legal risks and recommendations
     
     This endpoint accepts a document file, processes it, and returns
     analysis points containing causes, risks, and recommendations.
+    Requires authentication via Bearer token.
     """
     try:
-        logger.info(f"Analyze request: id='{id}', filename='{file.filename}'")
+        # Require authentication
+        user_id = await auth_utils.require_authentication(authorization)
+        
+        logger.info(f"Analyze request: id='{id}', filename='{file.filename}', user='{user_id}'")
         
         # Read file content
         file_content = await file.read()
@@ -101,7 +112,7 @@ async def analyze_document(
         # Create analyze request
         analyze_request = AnalyzeRequest(id=id, content=file_content)
         
-        response = await analyzer_service.analyze_document(analyze_request, db)
+        response = await analyzer_service.analyze_document(analyze_request, db, user_id)
         return response
         
     except HTTPException:
@@ -117,13 +128,18 @@ async def analyze_document(
 @router.post("/retrieve-rules", response_model=RetrieveResponse)
 async def retrieve_rules(
     request: RetrieveRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
 ):
     """
     Retrieve k unique rules (articles) based on query using hybrid BM25+vector+RRF search (unique rules).
+    Requires authentication via Bearer token.
     """
     try:
-        logger.info(f"Retrieve rules request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}")
+        # Require authentication
+        user_id = await auth_utils.require_authentication(authorization)
+        
+        logger.info(f"Retrieve rules request: query='{request.query[:50]}...', k={request.k}, distance={request.distance_function}, user='{user_id}'")
         if request.k > settings.max_k:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -148,15 +164,22 @@ async def retrieve_rules(
 
 
 @router.post("/embed", response_model=EmbedResponse)
-async def embed_text(request: EmbedRequest):
+async def embed_text(
+    request: EmbedRequest,
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
+):
     """
     Generate embeddings for input text
     
     This endpoint accepts text input and returns the corresponding
     vector embedding using the configured sentence transformer model.
+    Requires authentication via Bearer token.
     """
     try:
-        logger.info(f"Embed request: text='{request.text[:50]}...'")
+        # Require authentication
+        user_id = await auth_utils.require_authentication(authorization)
+        
+        logger.info(f"Embed request: text='{request.text[:50]}...', user='{user_id}'")
         
         # Generate embedding using the embedding service
         embedding = embedding_service.encode_to_list(request.text)
@@ -179,13 +202,21 @@ async def embed_text(request: EmbedRequest):
 
 
 @router.get("/metrics/retrieval", response_model=RetrievalMetricsResponse)
-async def retrieval_metrics(db: Session = Depends(get_db)):
+async def retrieval_metrics(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
+):
     """
     Compute intrinsic retrieval metrics for all embeddings in the rule_chunks table.
     - Total dimension variance
     - Silhouette Score (document = cluster, by file_name)
     - Effective Intrinsic Dimensionality (EID) and Dimensionality Redundancy (DR)
+    Requires authentication via Bearer token.
     """
+    # Require authentication
+    user_id = await auth_utils.require_authentication(authorization)
+    logger.info(f"Metrics request from user: {user_id}")
+    
     # Use the retrieval service to get all embeddings and labels
     embeddings, labels = retrieval_service.get_all_embeddings_and_labels(db)
     if not embeddings or len(embeddings) < 2:
@@ -235,7 +266,8 @@ async def retrieval_metrics(db: Session = Depends(get_db)):
 @router.get("/export/{document_id}/pdf")
 async def export_analysis_pdf(
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None, description="Bearer token for authentication")
 ):
     """
     Export analysis results as PDF report
@@ -245,13 +277,19 @@ async def export_analysis_pdf(
         
     Returns:
         PDF file with formatted analysis report
+    
+    Requires authentication via Bearer token.
     """
     try:
-        logger.info(f"PDF export request for document: {document_id}")
+        # Require authentication
+        user_id = await auth_utils.require_authentication(authorization)
         
-        # Get analysis from database
+        logger.info(f"PDF export request for document: {document_id}, user: {user_id}")
+        
+        # Get analysis from database filtered by user for security
         analysis_result = db.query(AnalysisResult).filter(
-            AnalysisResult.document_id == document_id
+            AnalysisResult.document_id == document_id,
+            AnalysisResult.user_id == user_id
         ).first()
         
         if not analysis_result:

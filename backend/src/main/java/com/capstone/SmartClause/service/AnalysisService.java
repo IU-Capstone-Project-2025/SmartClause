@@ -26,12 +26,22 @@ public class AnalysisService {
     private RestTemplate restTemplate;
 
     public AnalysisResponse analyzeDocument(String id, MultipartFile file) throws IOException {
+        return analyzeDocument(id, file, null);
+    }
+
+    public AnalysisResponse analyzeDocument(String id, MultipartFile file, String authorizationHeader) throws IOException {
         logger.info("Sending document for analysis: id={}, filename={}", id, file.getOriginalFilename());
 
         String analyzeUrl = analyzerApiUrl + "/analyze";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        
+        // Add JWT authorization header if provided
+        if (authorizationHeader != null && !authorizationHeader.trim().isEmpty()) {
+            headers.set("Authorization", authorizationHeader);
+            logger.debug("Added Authorization header to analyzer request");
+        }
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("id", id);
@@ -61,12 +71,22 @@ public class AnalysisService {
     }
 
     public byte[] exportAnalysisPdf(String documentId) {
+        return exportAnalysisPdf(documentId, null);
+    }
+
+    public byte[] exportAnalysisPdf(String documentId, String authorizationHeader) {
         logger.info("Exporting analysis as PDF for document: {}", documentId);
 
         String exportUrl = analyzerApiUrl + "/export/" + documentId + "/pdf";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(MediaType.parseMediaTypes("application/pdf"));
+        
+        // Add JWT authorization header if provided
+        if (authorizationHeader != null && !authorizationHeader.trim().isEmpty()) {
+            headers.set("Authorization", authorizationHeader);
+            logger.debug("Added Authorization header to analyzer PDF export request");
+        }
 
         HttpEntity<?> requestEntity = new HttpEntity<>(headers);
 

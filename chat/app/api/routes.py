@@ -22,27 +22,74 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def extract_user_id_from_header(authorization: Optional[str] = Header(None)) -> str:
+async def extract_user_id_from_header(authorization: Optional[str] = Header(None)) -> str:
     """
-    Extract user ID from Authorization header.
-    For now, this is a placeholder implementation that returns a default user.
-    In the future, this will parse JWT token and extract user ID.
+    Extract user ID from Authorization header by validating JWT token with backend service.
     """
     try:
         if authorization is None or authorization.strip() == "":
             logger.debug("No authorization header provided")
-            return "default-user-123"  # Default user for development
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header is required"
+            )
         
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-            logger.debug(f"Received Bearer token: {token[:10]}...")
-            # TODO: Parse JWT token and extract user ID
-            # For now, return default user
-            return "default-user-123"
+        if not authorization.startswith("Bearer "):
+            logger.debug("Authorization header is not in Bearer format")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header must be in Bearer format"
+            )
+            
+        token = authorization[7:]
+        logger.debug(f"Received Bearer token: {token[:10]}...")
         
-        logger.debug("Authorization header format not recognized")
-        return "default-user-123"
+        # Validate token with backend service
+        import httpx
         
+        try:
+            backend_url = "http://backend:8000"  # Backend service URL
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{backend_url}/api/auth/profile",
+                    headers={"Authorization": authorization},
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    user_data = response.json()
+                    user_id = user_data.get("id")
+                    if user_id:
+                        logger.debug(f"Successfully validated token for user: {user_id}")
+                        return user_id
+                    else:
+                        logger.error("Backend returned valid response but no user ID")
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid token: no user ID"
+                        )
+                else:
+                    logger.debug(f"Backend token validation failed: {response.status_code}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid or expired token"
+                    )
+                    
+        except httpx.RequestError as e:
+            logger.error(f"Error connecting to backend for token validation: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service unavailable"
+            )
+        except httpx.TimeoutException:
+            logger.error("Timeout validating token with backend")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service timeout"
+            )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to extract user ID from authorization header: {e}")
         raise HTTPException(
@@ -101,7 +148,7 @@ async def get_messages(
             )
         
         # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        user_id = await extract_user_id_from_header(authorization)
         
         # Validate pagination parameters
         if limit < 1 or limit > 100:
@@ -168,7 +215,7 @@ async def send_message(
             )
         
         # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        user_id = await extract_user_id_from_header(authorization)
         
         logger.info(f"Processing message from user {user_id} in space {space_id}")
         
@@ -242,7 +289,7 @@ async def get_chat_session(
             )
         
         # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        user_id = await extract_user_id_from_header(authorization)
         
         # Get or create session
         session = await memory_service.get_or_create_session(
@@ -288,7 +335,7 @@ async def update_memory_length(
             )
         
         # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        user_id = await extract_user_id_from_header(authorization)
         
         # Update session memory length
         session = await memory_service.update_session_memory_length(

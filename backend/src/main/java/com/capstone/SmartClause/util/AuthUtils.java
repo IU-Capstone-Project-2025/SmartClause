@@ -1,68 +1,86 @@
 package com.capstone.SmartClause.util;
 
+import com.capstone.SmartClause.service.JwtService;
+import com.capstone.SmartClause.service.UserService;
+import com.capstone.SmartClause.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class AuthUtils {
     
     private static final Logger logger = LoggerFactory.getLogger(AuthUtils.class);
     
+    @Autowired
+    private JwtService jwtService;
+    
+    @Autowired
+    private UserService userService;
+    
     /**
-     * Extracts user ID from Authorization header.
+     * Extracts user ID from Authorization header by parsing and validating JWT token.
      * 
-     * For now, this is a placeholder implementation that returns a default user.
-     * In the future, this will:
-     * 1. Parse JWT token from "Bearer <token>" format
-     * 2. Validate token signature and expiration
-     * 3. Extract user ID from token claims
-     * 4. Handle token refresh if needed
-     * 
-     * @param authorizationHeader The Authorization header value
+     * @param authorizationHeader The Authorization header value in format "Bearer <token>"
      * @return User ID string, or null if not authenticated
      */
     public String extractUserIdFromHeader(String authorizationHeader) {
         try {
-            // TODO: Replace with actual JWT parsing when authentication is implemented
             if (authorizationHeader == null || authorizationHeader.trim().isEmpty()) {
                 logger.debug("No authorization header provided");
-                return getDefaultUserId();
+                return null;
             }
             
-            // For now, treat any authorization header as valid and return default user
-            // Future implementation will parse JWT token here
-            if (authorizationHeader.startsWith("Bearer ")) {
-                String token = authorizationHeader.substring(7);
-                logger.debug("Received Bearer token: {}", token.substring(0, Math.min(token.length(), 10)) + "...");
-                
-                // TODO: Parse JWT token and extract user ID
-                // Example future implementation:
-                // Claims claims = Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(token).getBody();
-                // return claims.getSubject(); // user ID
-                
-                return getDefaultUserId();
+            if (!authorizationHeader.startsWith("Bearer ")) {
+                logger.debug("Authorization header is not in Bearer format");
+                return null;
             }
             
-            logger.debug("Authorization header format not recognized");
-            return getDefaultUserId();
+            String token = authorizationHeader.substring(7);
+            
+            // Validate token format first
+            if (!jwtService.isTokenValidFormat(token)) {
+                logger.debug("Invalid JWT token format");
+                return null;
+            }
+            
+            // Extract user ID from token
+            String userId = jwtService.extractUserId(token);
+            if (userId == null) {
+                logger.debug("No user ID found in token");
+                return null;
+            }
+            
+            // Verify user exists and is active
+            Optional<User> userOpt = userService.findById(UUID.fromString(userId));
+            if (userOpt.isEmpty()) {
+                logger.debug("User not found for ID: {}", userId);
+                return null;
+            }
+            
+            User user = userOpt.get();
+            if (!user.getIsActive()) {
+                logger.debug("User account is deactivated: {}", userId);
+                return null;
+            }
+            
+            // Additional token validation against user
+            if (!jwtService.isTokenValid(token, user)) {
+                logger.debug("Token validation failed for user: {}", userId);
+                return null;
+            }
+            
+            logger.debug("Successfully authenticated user: {}", userId);
+            return userId;
             
         } catch (Exception e) {
-            logger.error("Failed to extract user ID from authorization header", e);
-            return null; // Return null for invalid tokens
+            logger.error("Failed to extract user ID from authorization header: {}", e.getMessage());
+            return null;
         }
-    }
-    
-    /**
-     * Returns a default user ID for development/testing purposes.
-     * Remove this method when real authentication is implemented.
-     * 
-     * @return Default user ID
-     */
-    private String getDefaultUserId() {
-        // For development, return a consistent default user ID
-        // This allows testing user-specific functionality
-        return "default-user-123";
     }
     
     /**

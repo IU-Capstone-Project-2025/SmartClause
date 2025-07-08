@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -46,11 +47,12 @@ public class Controller {
     })
     @PostMapping("/get_analysis")
     public ResponseEntity<?> uploadDocumentFile(
+            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(description = "Document identifier") @RequestParam("id") String id,
             @Parameter(description = "Document file") @RequestParam("bytes") MultipartFile file) {
         
         try {
-            AnalysisResponse response = analysisService.analyzeDocument(id, file);
+            AnalysisResponse response = analysisService.analyzeDocument(id, file, authorization);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

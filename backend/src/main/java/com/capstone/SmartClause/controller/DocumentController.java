@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api")
@@ -45,24 +46,15 @@ public class DocumentController {
         @ApiResponse(responseCode = "400", description = "Invalid request data",
                 content = @Content(mediaType = "application/json"))
     })
-    @PostMapping(value = "/spaces/{spaceId}/documents", consumes = "multipart/form-data")
+    @PostMapping("/spaces/{spaceId}/documents")
     public ResponseEntity<?> uploadDocument(
             @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
-            @Parameter(description = "Binary file data (multipart/form-data)", 
-                      content = @Content(mediaType = "application/octet-stream"),
-                      schema = @Schema(type = "string", format = "binary")) 
-            @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Document name (optional)") @RequestParam(value = "name", required = false) String name) {
+            @Parameter(description = "Document file") @RequestParam("file") MultipartFile file) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest()
-                    .body(Map.of("error", "File cannot be empty"));
-            }
-
             // Extract user ID from authorization header
             String userId = authUtils.extractUserIdFromHeader(authorization);
             if (userId == null) {
@@ -70,16 +62,18 @@ public class DocumentController {
                     .body(Map.of("error", "Authentication required"));
             }
             
-            DocumentDto.DocumentUploadResponse document = documentService.uploadDocument(spaceUuid, file, name, userId);
+            DocumentDto.DocumentUploadResponse response = documentService.uploadDocument(spaceUuid, file, userId, authorization);
             
-            return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Map.of("document", document));
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to upload document"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to upload document: " + e.getMessage()));
+                .body(Map.of("error", "Failed to upload document"));
         }
     }
 
@@ -257,7 +251,7 @@ public class DocumentController {
                     .body(Map.of("error", "Authentication required"));
             }
             
-            String analysisId = documentService.reanalyzeDocument(documentUuid, userId);
+            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, authorization);
             
             return ResponseEntity.accepted()
                 .body(Map.of(
@@ -297,7 +291,7 @@ public class DocumentController {
                     .body(Map.of("error", "Authentication required"));
             }
             
-            byte[] pdfBytes = documentService.exportDocumentAnalysisPdf(documentUuid, userId);
+            byte[] pdfBytes = documentService.exportDocumentAnalysisPdf(documentUuid, userId, authorization);
             
             if (pdfBytes == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
