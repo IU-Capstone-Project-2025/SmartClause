@@ -204,7 +204,7 @@ async def retrieval_metrics(db: Session = Depends(get_db)):
 
     # 2. Silhouette Score (cosine distance, group by file_name)
     try:
-        sil_score = float(silhouette_score(embeddings, labels, metric='cosine'))
+        sil_score = float(silhouette_score(embeddings, labels, metric='l2'))
     except Exception:
         sil_score = 0.0
 

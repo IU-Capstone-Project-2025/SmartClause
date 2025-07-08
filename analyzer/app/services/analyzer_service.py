@@ -243,7 +243,7 @@ class AnalyzerService(RetryMixin):
             
             # Call the retrieval service directly
             logger.debug(f"Retrieving context for query length: {len(point_content)}")
-            response = await retrieval_service.retrieve_rules(retrieve_request, db)
+            response = await retrieval_service.retrieve_rules_rrf(retrieve_request, db)
             
             # Format the retrieved rules for context
             chunks = []
