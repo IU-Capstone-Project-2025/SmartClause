@@ -17,6 +17,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 @RestController
@@ -54,7 +57,7 @@ public class AuthController {
         }
     }
 
-    @Operation(summary = "User login", description = "Authenticate user and receive JWT token")
+    @Operation(summary = "User login", description = "Authenticate user and receive JWT token in cookie")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Login successful",
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthDto.AuthResponse.class))),
@@ -64,13 +67,53 @@ public class AuthController {
                 content = @Content(mediaType = "application/json"))
     })
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody AuthDto.LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody AuthDto.LoginRequest request, HttpServletResponse response) {
         try {
-            AuthDto.AuthResponse response = userService.authenticateUser(request);
-            return ResponseEntity.ok(response);
+            AuthDto.AuthResponse authResponse = userService.authenticateUser(request);
+            
+            // Set JWT token as HTTP-only cookie
+            Cookie jwtCookie = new Cookie("smartclause_token", authResponse.getAccessToken());
+            jwtCookie.setHttpOnly(true);
+            jwtCookie.setSecure(false); // Set to true in production with HTTPS
+            jwtCookie.setMaxAge((int) authResponse.getExpiresIn()); // Cookie expires with token
+            jwtCookie.setPath("/");
+            // Note: SameSite=Lax is the default behavior in modern browsers
+            response.addCookie(jwtCookie);
+            
+            // Return response without exposing the token in JSON (for security)
+            // Create a copy without the access token
+            AuthDto.AuthResponse sanitizedResponse = new AuthDto.AuthResponse();
+            sanitizedResponse.setTokenType(authResponse.getTokenType());
+            sanitizedResponse.setExpiresIn(authResponse.getExpiresIn());
+            sanitizedResponse.setUser(authResponse.getUser());
+            // accessToken is intentionally not set (remains null) for security
+            
+            return ResponseEntity.ok(sanitizedResponse);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("error", "Authentication failed: " + e.getMessage()));
+        }
+    }
+
+    @Operation(summary = "User logout", description = "Clear authentication cookie and logout user")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Logout successful",
+                content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthDto.MessageResponse.class)))
+    })
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpServletResponse response) {
+        try {
+            // Clear the JWT cookie
+            Cookie jwtCookie = new Cookie("smartclause_token", "");
+            jwtCookie.setHttpOnly(true);
+            jwtCookie.setMaxAge(0); // Expire immediately
+            jwtCookie.setPath("/");
+            response.addCookie(jwtCookie);
+            
+            return ResponseEntity.ok(Map.of("message", "Logout successful"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Logout failed: " + e.getMessage()));
         }
     }
 
@@ -83,9 +126,10 @@ public class AuthController {
     })
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization) {
+            HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         try {
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -110,16 +154,17 @@ public class AuthController {
     })
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Valid @RequestBody AuthDto.RegisterRequest request) {
+            HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody AuthDto.RegisterRequest requestBody) {
         try {
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
-            AuthDto.UserInfo userInfo = userService.updateUserProfile(userId, request);
+            AuthDto.UserInfo userInfo = userService.updateUserProfile(userId, requestBody);
             return ResponseEntity.ok(userInfo);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -141,16 +186,17 @@ public class AuthController {
     })
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Valid @RequestBody AuthDto.ChangePasswordRequest request) {
+            HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody AuthDto.ChangePasswordRequest requestBody) {
         try {
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
-            AuthDto.MessageResponse response = userService.changePassword(userId, request);
+            AuthDto.MessageResponse response = userService.changePassword(userId, requestBody);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -191,9 +237,10 @@ public class AuthController {
     })
     @DeleteMapping("/account")
     public ResponseEntity<?> deactivateAccount(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization) {
+            HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         try {
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));

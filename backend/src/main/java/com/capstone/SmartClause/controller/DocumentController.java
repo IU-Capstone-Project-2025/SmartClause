@@ -18,6 +18,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,21 +49,27 @@ public class DocumentController {
     })
     @PostMapping("/spaces/{spaceId}/documents")
     public ResponseEntity<?> uploadDocument(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
             @Parameter(description = "Document file") @RequestParam("file") MultipartFile file) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            DocumentDto.DocumentUploadResponse response = documentService.uploadDocument(spaceUuid, file, userId, authorization);
+            // For backward compatibility, try to get authorization token for service communication
+            String authToken = authUtils.extractTokenFromCookie(request);
+            if (authToken != null) {
+                authToken = "Bearer " + authToken;
+            }
+            
+            DocumentDto.DocumentUploadResponse response = documentService.uploadDocument(spaceUuid, file, userId, authToken);
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -84,14 +91,15 @@ public class DocumentController {
     })
     @GetMapping("/spaces/{spaceId}/documents")
     public ResponseEntity<?> getDocumentsInSpace(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Space ID") @PathVariable String spaceId) {
+            HttpServletRequest request,
+            @Parameter(description = "Space ID") @PathVariable String spaceId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -121,14 +129,15 @@ public class DocumentController {
     })
     @GetMapping("/documents/{documentId}")
     public ResponseEntity<?> getDocumentDetails(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Document ID") @PathVariable String documentId) {
+            HttpServletRequest request,
+            @Parameter(description = "Document ID") @PathVariable String documentId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -159,14 +168,15 @@ public class DocumentController {
     })
     @DeleteMapping("/documents/{documentId}")
     public ResponseEntity<?> deleteDocument(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Document ID") @PathVariable String documentId) {
+            HttpServletRequest request,
+            @Parameter(description = "Document ID") @PathVariable String documentId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -198,14 +208,15 @@ public class DocumentController {
     })
     @GetMapping("/documents/{documentId}/analysis")
     public ResponseEntity<?> getDocumentAnalysis(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Document ID") @PathVariable String documentId) {
+            HttpServletRequest request,
+            @Parameter(description = "Document ID") @PathVariable String documentId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -238,20 +249,21 @@ public class DocumentController {
     })
     @PostMapping("/documents/{documentId}/reanalyze")
     public ResponseEntity<?> reanalyzeDocument(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Document ID") @PathVariable String documentId) {
+            HttpServletRequest request,
+            @Parameter(description = "Document ID") @PathVariable String documentId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, authorization);
+            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, null); // No authToken needed for reanalysis
             
             return ResponseEntity.accepted()
                 .body(Map.of(
@@ -278,20 +290,21 @@ public class DocumentController {
     })
     @GetMapping("/documents/{documentId}/analysis/export")
     public ResponseEntity<?> exportDocumentAnalysisPdf(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Parameter(description = "Document ID") @PathVariable String documentId) {
+            HttpServletRequest request,
+            @Parameter(description = "Document ID") @PathVariable String documentId,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            byte[] pdfBytes = documentService.exportDocumentAnalysisPdf(documentUuid, userId, authorization);
+            byte[] pdfBytes = documentService.exportDocumentAnalysisPdf(documentUuid, userId, null); // No authToken needed for export
             
             if (pdfBytes == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
