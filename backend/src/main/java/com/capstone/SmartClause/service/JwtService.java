@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -78,6 +79,28 @@ public class JwtService {
         extraClaims.put("isEmailVerified", user.getIsEmailVerified());
         
         return generateToken(extraClaims, user);
+    }
+    
+    /**
+     * Generate system token for service account operations.
+     * Used for internal microservice communication when handling public requests.
+     */
+    public String generateSystemToken() {
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("userId", "system");
+        extraClaims.put("email", "system@smartclause.internal");
+        extraClaims.put("role", "SYSTEM");
+        extraClaims.put("isEmailVerified", true);
+        extraClaims.put("serviceAccount", true);
+        
+        // Create a minimal UserDetails implementation for system account
+        UserDetails systemUser = new org.springframework.security.core.userdetails.User(
+            "system", 
+            "", // No password needed for service account
+            List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_SYSTEM"))
+        );
+        
+        return generateToken(extraClaims, systemUser);
     }
     
     /**

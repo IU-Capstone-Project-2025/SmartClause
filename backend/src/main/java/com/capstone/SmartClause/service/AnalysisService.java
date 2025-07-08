@@ -25,23 +25,39 @@ public class AnalysisService {
     @Autowired
     private RestTemplate restTemplate;
 
+    @Autowired
+    private JwtService jwtService;
+
     public AnalysisResponse analyzeDocument(String id, MultipartFile file) throws IOException {
         return analyzeDocument(id, file, null);
     }
 
     public AnalysisResponse analyzeDocument(String id, MultipartFile file, String authorizationHeader) throws IOException {
         logger.info("Sending document for analysis: id={}, filename={}", id, file.getOriginalFilename());
+        logger.info("Received authorization header: {}", authorizationHeader != null ? "[PRESENT]" : "[NULL]");
 
         String analyzeUrl = analyzerApiUrl + "/analyze";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         
-        // Add JWT authorization header if provided
-        if (authorizationHeader != null && !authorizationHeader.trim().isEmpty()) {
-            headers.set("Authorization", authorizationHeader);
-            logger.debug("Added Authorization header to analyzer request");
+        // Determine which authorization to use
+        String effectiveAuthorization = authorizationHeader;
+        
+        // If no valid user authentication provided, use system account for internal service communication
+        if (authorizationHeader == null || authorizationHeader.trim().isEmpty()) {
+            logger.info("No user authorization provided - generating system token for public request");
+            String systemToken = jwtService.generateSystemToken();
+            effectiveAuthorization = "Bearer " + systemToken;
+            logger.info("Generated system token for public request: {}...", systemToken.substring(0, Math.min(50, systemToken.length())));
+            logger.debug("Using system token for public request to analyzer service");
+        } else {
+            logger.info("Using provided user authentication for analyzer request");
         }
+        
+        // Always add authorization header (either user or system)
+        headers.set("Authorization", effectiveAuthorization);
+        logger.info("Sending Authorization header to analyzer: {}...", effectiveAuthorization.substring(0, Math.min(20, effectiveAuthorization.length())));
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("id", id);
@@ -82,11 +98,20 @@ public class AnalysisService {
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(MediaType.parseMediaTypes("application/pdf"));
         
-        // Add JWT authorization header if provided
-        if (authorizationHeader != null && !authorizationHeader.trim().isEmpty()) {
-            headers.set("Authorization", authorizationHeader);
-            logger.debug("Added Authorization header to analyzer PDF export request");
+        // Determine which authorization to use
+        String effectiveAuthorization = authorizationHeader;
+        
+        // If no valid user authentication provided, use system account for internal service communication
+        if (authorizationHeader == null || authorizationHeader.trim().isEmpty()) {
+            String systemToken = jwtService.generateSystemToken();
+            effectiveAuthorization = "Bearer " + systemToken;
+            logger.debug("Using system token for public PDF export request to analyzer service");
+        } else {
+            logger.debug("Using provided user authentication for analyzer PDF export request");
         }
+        
+        // Always add authorization header (either user or system)
+        headers.set("Authorization", effectiveAuthorization);
 
         HttpEntity<?> requestEntity = new HttpEntity<>(headers);
 

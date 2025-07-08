@@ -96,6 +96,9 @@ async def analyze_document(
     Requires authentication via Bearer token or login cookie.
     """
     try:
+        logger.info(f"Analyze endpoint called with document: {id}")
+        logger.info(f"Authorization header received: {authorization[:30] if authorization else 'None'}...")
+        
         # Require authentication (supports both cookies and Authorization header)
         user_id = await auth_utils.require_authentication(request, authorization)
         

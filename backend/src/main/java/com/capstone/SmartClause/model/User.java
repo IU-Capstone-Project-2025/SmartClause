@@ -74,7 +74,7 @@ public class User implements UserDetails {
     
     // User roles enum
     public enum UserRole {
-        USER, ADMIN
+        USER, ADMIN, SYSTEM  // SYSTEM role for service account operations
     }
     
     // UserDetails interface methods

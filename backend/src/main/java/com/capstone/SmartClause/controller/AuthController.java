@@ -2,6 +2,7 @@ package com.capstone.SmartClause.controller;
 
 import com.capstone.SmartClause.model.dto.AuthDto;
 import com.capstone.SmartClause.service.UserService;
+import com.capstone.SmartClause.service.JwtService;
 import com.capstone.SmartClause.util.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import jakarta.validation.Valid;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 @RestController
@@ -28,11 +31,16 @@ import java.util.Map;
 @Tag(name = "Authentication API", description = "User registration and authentication endpoints")
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+
     @Autowired
     private UserService userService;
     
     @Autowired
     private AuthUtils authUtils;
+    
+    @Autowired
+    private JwtService jwtService;
 
     @Operation(summary = "Register new user", description = "Register a new user account")
     @ApiResponses(value = {
@@ -128,18 +136,63 @@ public class AuthController {
     public ResponseEntity<?> getProfile(
             HttpServletRequest request,
             @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
+        
         try {
+            logger.info("Profile endpoint called with Authorization: {}", authorization != null ? "[PRESENT]" : "[NULL]");
+            
+            // First check if it's a system token (for service account access)
+            if (authorization != null && authorization.startsWith("Bearer ")) {
+                String token = authorization.substring(7);
+                if (isValidSystemToken(token)) {
+                    logger.info("Valid system token detected - returning system profile");
+                    return ResponseEntity.ok(new AuthDto.UserInfo(
+                        "system",
+                        "system",
+                        "system@smartclause.internal",
+                        "System",
+                        "Account",
+                        "System Account",
+                        "SYSTEM",
+                        true,
+                        null,
+                        null
+                    ));
+                }
+            }
+            
+            // Try to get user from cookie first, then from Authorization header
             String userId = authUtils.extractUserIdFromRequest(request, authorization);
+            
             if (userId == null) {
+                logger.warn("Authentication failed - no valid user ID found");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
-
+            
+            // Get user info from service
             AuthDto.UserInfo userInfo = userService.getUserProfile(userId);
+            logger.info("Successfully retrieved profile for user: {}", userId);
             return ResponseEntity.ok(userInfo);
+            
         } catch (Exception e) {
+            logger.error("Error getting user profile: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve profile: " + e.getMessage()));
+                .body(Map.of("error", "Failed to get user profile"));
+        }
+    }
+    
+    /**
+     * Validate if a token is a valid system token by checking its claims
+     */
+    private boolean isValidSystemToken(String token) {
+        try {
+            String userId = jwtService.extractUserId(token);
+            String role = jwtService.extractUserRole(token);
+            
+            return "system".equals(userId) && "SYSTEM".equals(role);
+        } catch (Exception e) {
+            logger.error("Error validating system token: {}", e.getMessage());
+            return false;
         }
     }
 

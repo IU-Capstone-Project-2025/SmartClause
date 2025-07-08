@@ -38,7 +38,8 @@ public class Controller {
     @Autowired
     private ChatService chatService;
 
-    @Operation(summary = "Upload and analyze a document", description = "Uploads a document file and returns analysis results")
+    @Operation(summary = "Upload and analyze a document", 
+              description = "Uploads a document file and returns analysis results. Works both with and without authentication for public demo access.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Document analyzed successfully",
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = AnalysisResponse.class))),
@@ -47,12 +48,22 @@ public class Controller {
     })
     @PostMapping("/get_analysis")
     public ResponseEntity<?> uploadDocumentFile(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Parameter(description = "Authorization header (optional for public demo access)") 
+            @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(description = "Document identifier") @RequestParam("id") String id,
             @Parameter(description = "Document file") @RequestParam("bytes") MultipartFile file) {
         
         try {
-            AnalysisResponse response = analysisService.analyzeDocument(id, file, authorization);
+            // Public Access Design: This endpoint supports both authenticated and anonymous users.
+            // For authenticated users, we pass the valid Bearer token to downstream services.
+            // For anonymous users (landing page/demo), we pass null so AnalysisService can generate a system token.
+            String authForService = null;
+            if (authorization != null && authorization.trim().startsWith("Bearer ") && authorization.trim().length() > 7) {
+                authForService = authorization;
+            }
+            // If authForService is null, AnalysisService will generate a system token for internal communication
+            
+            AnalysisResponse response = analysisService.analyzeDocument(id, file, authForService);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
