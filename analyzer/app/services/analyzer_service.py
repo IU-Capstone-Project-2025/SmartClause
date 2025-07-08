@@ -92,13 +92,23 @@ class AnalyzerService(RetryMixin):
             total_points = len(filtered_points)
             total_duration = (datetime.now() - analysis_start).total_seconds()
             
-            logger.info(
-                f"Analysis completed in {total_duration:.2f}s "
-                f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
-                f"Success rate: {successful_points}/{total_points} "
-                f"({(successful_points/total_points*100):.1f}%) - "
-                f"Validation: {validated_points} kept, {invalidated_points} filtered out"
-            )
+            # Calculate success rate, avoiding division by zero
+            if total_points > 0:
+                success_rate = (successful_points / total_points) * 100
+                logger.info(
+                    f"Analysis completed in {total_duration:.2f}s "
+                    f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
+                    f"Success rate: {successful_points}/{total_points} "
+                    f"({success_rate:.1f}%) - "
+                    f"Validation: {validated_points} kept, {invalidated_points} filtered out"
+                )
+            else:
+                logger.info(
+                    f"Analysis completed in {total_duration:.2f}s "
+                    f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
+                    f"All {len(analyzed_points)} points were filtered out by validation - "
+                    f"no issues found or all analysis points were invalidated"
+                )
             
             # Create response with filtered points
             all_analysis_points = []

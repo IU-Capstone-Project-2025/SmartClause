@@ -187,7 +187,7 @@ public class DocumentService {
             return Optional.empty();
         }
 
-        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
         return analysisOpt.map(AnalysisResult::getAnalysisPoints);
     }
 
@@ -205,7 +205,7 @@ public class DocumentService {
             return Optional.empty();
         }
 
-        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
         return analysisOpt.map(AnalysisResult::getAnalysisPoints);
     }
 
@@ -313,7 +313,7 @@ public class DocumentService {
         }
         
         // Verify analysis exists in database
-        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
         if (analysisOpt.isEmpty()) {
             throw new IllegalArgumentException("Analysis not found for this document");
         }
