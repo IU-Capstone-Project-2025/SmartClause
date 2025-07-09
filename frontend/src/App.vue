@@ -15,11 +15,25 @@
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
   name: 'App',
   computed: {
     showNavBar() {
       return this.$route.name !== 'Chat';
+    }
+  },
+  async created() {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      try {
+        await axios.get('/api/auth/profile');
+      } catch (error) {
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem('access_token');
+        }
+      }
     }
   },
   methods: {

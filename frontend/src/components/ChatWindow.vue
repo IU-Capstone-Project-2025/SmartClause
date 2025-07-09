@@ -17,7 +17,8 @@
           </div>
           <div class="message-content">
             <div class="message-bubble">
-              <p>{{ message.text }}</p>
+              <div v-if="message.sender === 'bot'" v-html="formatMessage(message.text)"></div>
+              <p v-else>{{ message.text }}</p>
             </div>
             <span class="timestamp">{{ message.timestamp }}</span>
           </div>
@@ -87,6 +88,23 @@ export default {
     }
   },
   methods: {
+    formatMessage(text) {
+      if (!text) return '';
+
+      // Process paragraphs and line breaks
+      const paragraphs = text.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '<br>').join('');
+
+      // Process bold text
+      let html = paragraphs.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      
+      // Process lists
+      html = html.replace(/<p>\* (.*?)<\/p>/g, '<li>$1</li>');
+
+      // Wrap list items in <ul>
+      html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+      
+      return html;
+    },
     sendMessage() {
       if (this.newMessage.trim() !== '') {
         this.$emit('send-message', this.newMessage.trim());
@@ -182,6 +200,15 @@ export default {
 
 .message-bubble p {
   margin: 0;
+}
+
+.message-bubble >>> ul {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.message-bubble >>> li {
+  margin-bottom: 5px;
 }
 
 .timestamp {

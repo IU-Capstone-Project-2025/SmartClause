@@ -6,6 +6,11 @@
         :space="spaceToDelete" 
         @close="cancelDelete" 
         @confirm="confirmDeleteSpace" />
+    <EditSpaceModal
+        v-if="isEditModalOpen"
+        :space="spaceToEdit"
+        @close="cancelEdit"
+        @update="handleUpdateSpace" />
 
     <div class="sidebar-content">
       <div class="app-branding-container">
@@ -29,10 +34,15 @@
       </div>
       <ul class="spaces-list" v-else>
         <li v-for="space in spaces" :key="space.id" @click="$emit('select-space', space.id)" :class="{ active: space.id === selectedSpaceId }">
-          <span class="space-name">{{ space.name }}</span>
-          <button @click.stop="promptDeleteSpace(space)" class="delete-space-btn" title="Delete space">
+          <span class="space-name" :title="space.name">{{ space.name }}</span>
+          <div class="space-actions">
+            <button @click.stop="promptEditSpace(space)" class="action-btn edit-btn" title="Edit space">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+            </button>
+            <button @click.stop="promptDeleteSpace(space)" class="action-btn delete-btn" title="Delete space">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
           </button>
+          </div>
         </li>
       </ul>
     </div>
@@ -42,12 +52,14 @@
 <script>
 import CreateSpaceModal from '@/components/CreateSpaceModal.vue';
 import DeleteSpaceModal from '@/components/DeleteSpaceModal.vue';
+import EditSpaceModal from '@/components/EditSpaceModal.vue';
 
 export default {
   name: 'SpacesSidebar',
   components: {
     CreateSpaceModal,
     DeleteSpaceModal,
+    EditSpaceModal,
   },
   props: {
     spaces: {
@@ -68,6 +80,8 @@ export default {
       isModalOpen: false,
       isDeleteModalOpen: false,
       spaceToDelete: null,
+      isEditModalOpen: false,
+      spaceToEdit: null,
     };
   },
   methods: {
@@ -90,6 +104,18 @@ export default {
     handleCreateSpace(spaceName) {
       this.$emit('create-space', spaceName);
       this.isModalOpen = false;
+    },
+    promptEditSpace(space) {
+      this.spaceToEdit = space;
+      this.isEditModalOpen = true;
+    },
+    cancelEdit() {
+      this.isEditModalOpen = false;
+      this.spaceToEdit = null;
+    },
+    handleUpdateSpace(updatedSpace) {
+      this.$emit('update-space', updatedSpace);
+      this.cancelEdit();
     },
   }
 }
@@ -237,26 +263,47 @@ export default {
     margin-right: 10px;
 }
 
-.delete-space-btn {
+.space-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.spaces-list li:hover .space-actions {
+  visibility: visible;
+  opacity: 1;
+}
+
+.action-btn {
   background: none;
   border: none;
   color: #a0aec0;
   cursor: pointer;
   padding: 5px;
   border-radius: 5px;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out, background-color 0.3s, color 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease-in-out;
 }
 
-.spaces-list li:hover .delete-space-btn {
-  visibility: visible;
-  opacity: 1;
-}
-
-.delete-space-btn:hover {
-  background-color: #e53e3e;
+.action-btn:hover {
   color: #ffffff;
+}
+
+.edit-btn:hover {
+  background-color: #dd6b20;
+}
+
+.delete-btn {
+  /* No special hover because it's handled in a modal */
+}
+
+.delete-btn:hover {
+    background-color: #e53e3e;
 }
 
 .empty-state {
