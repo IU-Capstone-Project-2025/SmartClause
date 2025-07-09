@@ -26,6 +26,9 @@ langchain>=0.1.0
 # LLM integration
 openai>=1.0.0
 
+# HTTP client for authentication validation
+httpx>=0.25.0
+
 # Environment configuration (used in scripts)
 python-dotenv>=1.0.0
 

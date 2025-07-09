@@ -1,21 +1,28 @@
 # SmartClause - AI-Powered Legal Document Analysis Platform
 
-**🚀 MVP Ready!** SmartClause is a complete AI-powered legal document analysis platform focused on the Russian legal market. The platform leverages RAG (Retrieval-Augmented Generation) technology with legal vector databases to provide intelligent document analysis and interactive legal consultation capabilities.
+**🚀 MVP Ready!** SmartClause is a complete AI-powered legal document analysis platform focused on the Russian legal market. The platform leverages RAG (Retrieval-Augmented Generation) technology with legal vector databases to provide intelligent document analysis and interactive legal consultation capabilities. It includes secure user registration and authentication, allowing users to manage their documents in private spaces.
 
 ## 🎯 What You Can Do
 
 **Ready to use out of the box:**
-- **📄 Upload and Analyze Documents**: Upload legal documents (up to 10MB) and get AI-powered risk analysis and recommendations
-- **💬 Interactive Legal Chat**: Ask questions about your documents and get AI-powered legal advice with conversation memory
-- **🔍 Semantic Legal Search**: Search through a comprehensive Civil Code database using natural language queries
-- **💻 Interactive Web Interface**: Complete workflow from document upload to analysis and consultation
-- **⚡ Real-time Processing**: Watch your documents being processed with live status updates
-- **🔗 REST API Access**: Full programmatic access to all analysis and chat capabilities
+- **🔐 Secure User Authentication**: Register and log in to a secure account to protect your data.
+- **📄 Upload and Analyze Documents**: Upload legal documents (up to 10MB) and get AI-powered risk analysis and recommendations.
+- **💬 Interactive Legal Chat**: Ask questions about your documents and get AI-powered legal advice with conversation memory.
+- **🔍 Semantic Legal Search**: Search through a comprehensive Civil Code database using natural language queries.
+- **💻 Interactive Web Interface**: Complete workflow from document upload to analysis and consultation.
+- **⚡ Real-time Processing**: Watch your documents being processed with live status updates.
+- **🔗 REST API Access**: Full programmatic access to all analysis and chat capabilities.
 
 ## ✨ Key Features
 
+### 🔐 User Authentication & Security
+- **Secure Registration**: Create user accounts with encrypted password storage.
+- **JWT-Based Authentication**: Secure authentication using JSON Web Tokens (JWT) stored in HTTP-only cookies.
+- **Protected Endpoints**: Role-based access control for all sensitive operations.
+- **Profile Management**: Users can view and update their profile information and change passwords.
+
 ### 📋 Document Analysis Pipeline
-- **Smart Upload Interface**: Drag-and-drop document upload with progress tracking
+- **Smart Upload Interface**: Drag-and-drop document upload with progress tracking.
 - **AI-Powered Analysis**: Legal document analysis for risks, compliance issues, and recommendations
 - **Comprehensive Results**: Detailed analysis with causes, risks, and actionable recommendations
 - **Multiple File Formats**: Support for text files and structured documents
@@ -86,11 +93,13 @@ cp chat/env.example chat/.env
 **Required configuration in `analyzer/.env`:**
 ```bash
 OPENROUTER_API_KEY=your_actual_api_key_here
+JWT_SECRET=your_jwt_secret_here
 ```
 
 **Required configuration in `chat/.env`:**
 ```bash
 OPENROUTER_API_KEY=your_actual_api_key_here
+JWT_SECRET=your_jwt_secret_here
 ```
 
 ### 4. Launch the Platform
@@ -197,40 +206,81 @@ python analyzer/scripts/download_datasets.py
 
 ## 📚 API Documentation
 
-### Core Endpoints
+All primary user-facing endpoints are managed through the **Backend API (Spring Boot)** running on port 8000. The Analyzer and Chat services provide specialized AI functionalities and can also be accessed directly on their respective ports. Authentication is handled via JWT tokens passed in an `smartclause_token` HTTP-only cookie.
 
-#### 🔍 Analyzer API (Port 8001)
-- **GET /health**: Health check with database connectivity status
-- **POST /api/v1/retrieve-chunk**: Semantic document chunk retrieval
-- **POST /api/v1/retrieve-rules**: Semantic retrieval of unique legal rules
-- **POST /api/v1/analyze**: Legal document analysis with risk assessment
-- **POST /api/v1/embed**: Text embedding generation
-- **GET /api/v1/metrics/retrieval**: Embedding quality metrics
+### Backend API (Port 8000)
 
-#### 🔄 Backend API Gateway (Port 8000)
+#### 🔐 Authentication (`/api/auth`)
+- **`POST /register`**: Register a new user account.
+- **`POST /login`**: Authenticate a user and receive a JWT token in an HTTP-only cookie.
+- **`POST /logout`**: Clear the authentication cookie to log the user out.
+- **`GET /profile`**: Get the current authenticated user's profile information.
+- **`PUT /profile`**: Update the current user's profile.
+- **`PUT /change-password`**: Change the current user's password.
+- **`DELETE /account`**: Deactivate the current user's account.
 
-**Document Management:**
-- **POST /api/spaces**: Create new document space
-- **GET /api/spaces**: List user spaces
-- **POST /api/spaces/{spaceId}/documents**: Upload document to space
-- **GET /api/spaces/{spaceId}/documents**: Get documents in space
-- **GET /api/documents/{documentId}/analysis**: Get document analysis results
+#### 📁 Document & Space Management (`/api/spaces`, `/api/documents`)
+- **`POST /api/spaces`**: Create a new document workspace.
+- **`GET /api/spaces`**: List all workspaces for the authenticated user.
+- **`POST /api/spaces/{spaceId}/documents`**: Upload a document to a specific workspace.
+- **`GET /api/spaces/{spaceId}/documents`**: Get all documents within a workspace.
+- **`GET /api/documents/{documentId}/analysis`**: Retrieve the analysis results for a specific document.
 
-**Chat Integration (Proxied to Chat Service):**
-- **GET /api/spaces/{spaceId}/messages**: Get chat messages for space
-- **POST /api/spaces/{spaceId}/messages**: Send message to space chat
-- **GET /api/spaces/{spaceId}/session**: Get chat session information
-- **PUT /api/spaces/{spaceId}/session/memory**: Update conversation memory length
+#### 💬 Chat Integration (Proxied to Chat Service)
+- **`GET /api/spaces/{spaceId}/messages`**: Get chat history for a workspace.
+- **`POST /api/spaces/{spaceId}/messages`**: Send a message and get an AI response.
+- **`GET /api/spaces/{spaceId}/session`**: Get chat session information for a workspace.
+- **`PUT /api/spaces/{spaceId}/session/memory`**: Update the conversation memory length for a session.
 
-**System:**
-- **GET /api/health**: Overall system health check (includes all services)
+### 🔍 Analyzer API (Port 8001)
+The Analyzer service handles the core RAG and AI analysis tasks.
+- **`GET /health`**: Health check with database connectivity status.
+- **`POST /api/v1/retrieve-chunk`**: Semantic document chunk retrieval.
+- **`POST /api/v1/retrieve-rules`**: Semantic retrieval of unique legal rules.
+- **`POST /api/v1/analyze`**: Legal document analysis with risk assessment.
+- **`POST /api/v1/embed`**: Text embedding generation.
+- **`GET /api/v1/metrics/retrieval`**: Embedding quality metrics.
+
+### 💬 Chat API (Port 8002)
+The Chat service manages conversations, memory, and LLM interactions. It is typically accessed via the Backend API Gateway but can be called directly.
+- **`GET /health`**: Health check for the chat service and its dependencies.
+- **`GET /api/v1/spaces/{space_id}/messages`**: Get paginated chat messages for a space.
+- **`POST /api/v1/spaces/{space_id}/messages`**: Send a message to a space and get an AI-generated response.
+- **`GET /api/v1/spaces/{space_id}/session`**: Retrieve session information, including memory configuration.
+- **`PUT /api/v1/spaces/{space_id}/session/memory`**: Update the conversation memory length for a session.
 
 ### API Usage Examples
 
+#### User Registration
+```bash
+curl -X POST "http://localhost:8000/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "strongpassword123",
+    "firstName": "Test",
+    "lastName": "User"
+  }'
+```
+
+#### User Login
+```bash
+# The JWT token will be returned in an HTTP-only cookie
+curl -X POST "http://localhost:8000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "strongpassword123"
+  }'
+```
+
 #### Semantic Search
 ```bash
+# Assumes you have a valid cookie from logging in
 curl -X POST "http://localhost:8001/api/v1/retrieve-rules" \
   -H "Content-Type: application/json" \
+  --cookie "smartclause_token=your_jwt_token_here" \
   -d '{
     "query": "contract termination conditions",
     "k": 5,
@@ -240,32 +290,22 @@ curl -X POST "http://localhost:8001/api/v1/retrieve-rules" \
 
 #### Document Analysis
 ```bash
+# Assumes you have a valid cookie from logging in
 curl -X POST "http://localhost:8001/api/v1/analyze" \
+  -H "Authorization: Bearer your_jwt_token_here" \
   -F "id=my_contract_123" \
   -F "file=@contract.txt"
 ```
 
 #### Legal Chat (via Backend Gateway)
 ```bash
-# Send a message to space chat
-curl -X POST "http://localhost:8000/api/spaces/{spaceId}/messages" \
+# Assumes you have a valid cookie from logging in
+curl -X POST "http://localhost:8000/api/spaces/your_space_id/messages" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your_token" \
+  --cookie "smartclause_token=your_jwt_token_here" \
   -d '{
-    "content": "What are the main risks in this employment contract?",
-    "type": "user"
+    "message": "What are the key risks in this document?"
   }'
-
-# Get chat messages with pagination
-curl -X GET "http://localhost:8000/api/spaces/{spaceId}/messages?limit=10&offset=0" \
-  -H "Authorization: Bearer your_token"
-```
-
-#### Text Embedding
-```bash
-curl -X POST "http://localhost:8001/api/v1/embed" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Your text to embed"}'
 ```
 
 ## 🔧 Advanced Configuration

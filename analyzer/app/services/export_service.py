@@ -447,6 +447,50 @@ class ExportService:
         }
         """
 
+    async def export_analysis_as_pdf(self, document_id: str, db, user_id: str) -> bytes:
+        """Retrieve analysis results for the given document ID from the database and export them as a PDF.
+
+        Args:
+            document_id: The ID of the document whose analysis should be exported.
+            db: SQLAlchemy session for DB access.
+            user_id: ID of the requesting user (can be "system" for service account). Used for access logging.
+
+        Returns:
+            PDF bytes generated from the analysis results.
+        """
+        import logging
+        from sqlalchemy import desc
+        from ..models.database import AnalysisResult
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"ExportService.export_analysis_as_pdf called for document_id={document_id} by user={user_id}")
+
+        # Fetch the most recent analysis result for the document.
+        try:
+            analysis_result: AnalysisResult = (
+                db.query(AnalysisResult)
+                .filter(AnalysisResult.document_id == document_id)
+                .order_by(desc(AnalysisResult.created_at))
+                .first()
+            )
+        except Exception as e:
+            logger.error(f"Database error when querying AnalysisResult: {e}")
+            raise ValueError("Database error while retrieving analysis results")
+
+        if not analysis_result:
+            logger.warning(f"No analysis results found for document_id={document_id}")
+            raise ValueError("Analysis results not found for the specified document")
+
+        analysis_data = analysis_result.analysis_points  # Stored as JSON in DB
+
+        if not analysis_data:
+            logger.warning(f"Analysis data is empty for document_id={document_id}")
+            raise ValueError("Analysis data is empty for the specified document")
+
+        # Generate PDF using existing helper.
+        pdf_bytes = self.export_analysis_pdf(analysis_data)
+        return pdf_bytes
+
 
 # Global instance
 export_service = ExportService() 

@@ -17,7 +17,25 @@ public class ChatDto {
     @AllArgsConstructor
     public static class SendMessageRequest {
         private String content;
+        
+        @JsonProperty("type")
         private String type = "user";
+        
+        // Constructor to ensure type is always set
+        public SendMessageRequest(String content) {
+            this.content = content;
+            this.type = "user";
+        }
+        
+        // Getter to ensure type is never null
+        public String getType() {
+            return type != null ? type : "user";
+        }
+        
+        // Setter to validate type
+        public void setType(String type) {
+            this.type = "user"; // Always force to "user" for security
+        }
     }
     
     @Data
