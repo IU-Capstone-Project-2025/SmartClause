@@ -47,17 +47,18 @@ public class DocumentController {
         @ApiResponse(responseCode = "400", description = "Invalid request data",
                 content = @Content(mediaType = "application/json"))
     })
-    @PostMapping("/spaces/{spaceId}/documents")
+    @PostMapping(value = "/spaces/{spaceId}/documents", consumes = {MediaType.MULTIPART_FORM_DATA_VALUE})
     public ResponseEntity<?> uploadDocument(
             HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
-            @Parameter(description = "Document file") @RequestParam("file") MultipartFile file) {
+            @Parameter(description = "Document file to upload") @RequestParam("file") MultipartFile file) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
             // Extract user ID from cookies or authorization header
-            String userId = authUtils.extractUserIdFromRequest(request, null);
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -65,7 +66,9 @@ public class DocumentController {
             
             // For backward compatibility, try to get authorization token for service communication
             String authToken = authUtils.extractTokenFromCookie(request);
-            if (authToken != null) {
+            if (authToken == null && authorization != null && authorization.startsWith("Bearer ")) {
+                authToken = authorization;
+            } else if (authToken != null) {
                 authToken = "Bearer " + authToken;
             }
             
@@ -288,7 +291,7 @@ public class DocumentController {
         @ApiResponse(responseCode = "401", description = "Authentication required",
                 content = @Content(mediaType = "application/json"))
     })
-    @GetMapping("/documents/{documentId}/analysis/export")
+    @GetMapping(value = "/documents/{documentId}/analysis/export", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<?> exportDocumentAnalysisPdf(
             HttpServletRequest request,
             @Parameter(description = "Document ID") @PathVariable String documentId,
