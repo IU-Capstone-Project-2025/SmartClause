@@ -3,6 +3,7 @@ import UploadScreen from '../views/UploadScreen.vue';
 import ProcessingScreen from '../views/ProcessingScreen.vue';
 import ResultsScreen from '../views/ResultsScreen.vue';
 import ChatScreen from '../views/ChatScreen.vue';
+import AuthScreen from '../views/AuthScreen.vue';
 
 const routes = [
   {
@@ -11,9 +12,30 @@ const routes = [
     component: UploadScreen,
   },
   {
+    path: '/login',
+    name: 'Login',
+    component: AuthScreen,
+    beforeEnter: (to, from, next) => {
+      const isAuthenticated = localStorage.getItem('access_token');
+      if (isAuthenticated) {
+        next('/spaces/default');
+      } else {
+        next();
+      }
+    },
+  },
+  {
     path: '/processing',
     name: 'Processing',
     component: ProcessingScreen,
+    beforeEnter: (to, from, next) => {
+      const isAuthenticated = localStorage.getItem('access_token');
+      if (isAuthenticated) {
+        next();
+      } else {
+        next('/login');
+      }
+    },
   },
   {
     path: '/results',
