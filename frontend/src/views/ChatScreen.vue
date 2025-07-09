@@ -16,6 +16,7 @@
       @create-space="handleCreateSpace"
       @delete-space="confirmDeleteSpace"
       @toggle-collapse="toggleSpacesSidebar"
+      @update-space="handleUpdateSpace"
     />
 
     <ChatWindow
@@ -27,6 +28,7 @@
     
     <DocumentsSidebar
       :documents="documents"
+      :uploading-files="uploadingFiles"
       :is-collapsed="isDocumentsSidebarCollapsed"
       @upload-files="handleFileUpload"
       @toggle-collapse="toggleDocumentsSidebar"
@@ -40,6 +42,7 @@
 import SpacesSidebar from '@/components/SpacesSidebar.vue';
 import DocumentsSidebar from '@/components/DocumentsSidebar.vue';
 import ChatWindow from '@/components/ChatWindow.vue';
+import * as api from '@/services/api';
 
 export default {
   name: 'ChatScreen',
@@ -53,20 +56,11 @@ export default {
       isBotTyping: false,
       isSpacesSidebarCollapsed: false,
       isDocumentsSidebarCollapsed: false,
-      selectedSpaceId: 1,
-      spaces: [
-        { id: 1, name: 'Contract Analysis', description: 'Discussion about the main contract.' },
-        { id: 2, name: 'Financial Projections', description: 'Planning for Q3 financials.' },
-        { id: 3, name: 'Marketing Strategy', description: 'Brainstorming for the new campaign.' },
-      ],
-      messages: [
-        { id: 1, sender: 'user', text: 'What are the key risks identified in the contract?', timestamp: '10:30 AM' },
-        { id: 2, sender: 'bot', text: 'The key risks are related to termination clauses and liability limitations. Would you like a detailed summary?', timestamp: '10:31 AM' },
-      ],
-      documents: [
-        { id: 1, name: 'Main_Contract_v2.docx' },
-        { id: 2, name: 'Appendix_A.pdf' },
-      ],
+      selectedSpaceId: null,
+      spaces: [],
+      messages: [],
+      documents: [],
+      uploadingFiles: [],
     };
   },
   computed: {
@@ -81,98 +75,178 @@ export default {
     toggleDocumentsSidebar() {
       this.isDocumentsSidebarCollapsed = !this.isDocumentsSidebarCollapsed;
     },
-    selectSpace(spaceId) {
+    async selectSpace(spaceId) {
+      if (!spaceId) return;
       this.selectedSpaceId = spaceId;
-      // Here you would typically fetch data for the selected space
-    },
-    sendMessage(messageText) {
-      if (messageText.trim() !== '') {
-        this.messages.push({
-          id: Date.now(),
-          sender: 'user',
-          text: messageText,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        });
-        this.isBotTyping = true;
-        
-        setTimeout(() => {
-          this.isBotTyping = false;
-          this.messages.push({
-            id: Date.now(),
-            sender: 'bot',
-            text: 'I am processing your request... Please wait.',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          });
-        }, 2000);
+      this.$router.replace({ name: 'Chat', params: { spaceId } });
+      
+      try {
+        const spaceDetails = await api.getSpaceDetails(spaceId);
+        if (spaceDetails.data.space) {
+            const spaceIndex = this.spaces.findIndex(s => s.id === spaceId);
+            if (spaceIndex !== -1) {
+                this.spaces[spaceIndex] = spaceDetails.data.space;
+            }
+        }
+      } catch (e) {
+        console.error('Error fetching space details:', e);
       }
-    },
-    confirmDeleteSpace(deletedSpaceId) {
-      this.spaces = this.spaces.filter(s => s.id !== deletedSpaceId);
 
-      if (this.selectedSpaceId === deletedSpaceId) {
-        if (this.spaces.length > 0) {
-          this.selectedSpaceId = this.spaces[0].id;
-        } else {
-          this.selectedSpaceId = null;
-        }
+      try {
+        const documentsRes = await api.getDocuments(spaceId);
+        this.documents = documentsRes.data.documents || [];
+      } catch (e) {
+        console.error('Error fetching documents:', e);
+        this.documents = [];
+      }
+
+      try {
+        const messagesRes = await api.getMessages(spaceId);
+        const sortedMessages = messagesRes.data.messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        this.messages = sortedMessages.map(m => ({
+          id: m.id,
+          sender: m.type === 'user' ? 'user' : 'bot',
+          text: m.content,
+          timestamp: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
+      } catch (e) {
+        console.error('Error fetching messages:', e);
+        this.messages = [];
       }
     },
-    handleCreateSpace(spaceName) {
-      const newSpace = {
-        id: Date.now(),
-        name: spaceName,
-        description: 'A new space for collaboration.'
-      };
-      this.spaces.push(newSpace);
-      this.selectSpace(newSpace.id);
+    async sendMessage(messageText) {
+      if (messageText.trim() === '') return;
+      
+      const tempId = Date.now();
+      this.messages.push({
+        id: tempId,
+        sender: 'user',
+        text: messageText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+
+      this.isBotTyping = true;
+      try {
+        await api.sendMessage(this.selectedSpaceId, { content: messageText, type: 'user' });
+        // After sending, refetch messages to get the bot's response
+        const messagesRes = await api.getMessages(this.selectedSpaceId);
+        const sortedMessages = messagesRes.data.messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        this.messages = sortedMessages.map(m => ({
+          id: m.id,
+          sender: m.type === 'user' ? 'user' : 'bot',
+          text: m.content,
+          timestamp: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
+      } catch (error) {
+        console.error('Error sending message:', error);
+        this.messages = this.messages.filter(m => m.id !== tempId);
+      } finally {
+        this.isBotTyping = false;
+      }
     },
-    handleFileUpload(files) {
-        if (!files.length) return;
-        
-        for(let i=0; i< files.length; i++) {
-            const newDoc = {
-                id: Date.now() + i,
-                name: files[i].name
-            };
-            this.documents.push(newDoc);
+    async confirmDeleteSpace(deletedSpaceId) {
+        try {
+            await api.deleteSpace(deletedSpaceId);
+            this.spaces = this.spaces.filter(s => s.id !== deletedSpaceId);
+
+            if (this.selectedSpaceId === deletedSpaceId) {
+                if (this.spaces.length > 0) {
+                    this.selectSpace(this.spaces[0].id);
+                } else {
+                    this.selectedSpaceId = null;
+                    this.documents = [];
+                    this.messages = [];
+                }
+            }
+        } catch (error) {
+            console.error('Error deleting space:', error);
         }
     },
-    handleDeleteDocument(docId) {
-      this.documents = this.documents.filter(d => d.id !== docId);
+    async handleCreateSpace(spaceName) {
+      try {
+        const response = await api.createSpace({ name: spaceName, description: '' });
+        const newSpace = response.data.space;
+        this.spaces.push(newSpace);
+        this.selectSpace(newSpace.id);
+      } catch (error) {
+        console.error('Error creating space:', error);
+      }
+    },
+    async handleUpdateSpace(updatedSpace) {
+      try {
+        const response = await api.updateSpace(updatedSpace.id, { name: updatedSpace.name });
+        const returnedSpace = response.data.space;
+        const index = this.spaces.findIndex(s => s.id === returnedSpace.id);
+        if (index !== -1) {
+          this.spaces.splice(index, 1, returnedSpace);
+        }
+      } catch (error) {
+        console.error('Error updating space:', error);
+      }
+    },
+    async handleFileUpload(files) {
+        if (!files.length || !this.selectedSpaceId) return;
+        
+        const newUploadingFiles = Array.from(files).map(file => ({
+            id: `uploading-${file.name}-${Date.now()}`,
+            name: file.name,
+        }));
+        
+        this.uploadingFiles = [...this.uploadingFiles, ...newUploadingFiles];
+
+        try {
+            await Promise.all(Array.from(files).map(file => api.uploadDocument(this.selectedSpaceId, file)));
+        } catch (error) {
+            console.error('Error uploading files:', error);
+            // Here you could add more user-facing error handling
+        } finally {
+            // Refresh the documents list from the server
+            try {
+                const documentsRes = await api.getDocuments(this.selectedSpaceId);
+                this.documents = documentsRes.data.documents || [];
+            } catch (e) {
+                console.error('Error fetching documents after upload:', e);
+            }
+            // Remove the files that were just being uploaded from the uploadingFiles list
+            const newUploadingFileIds = new Set(newUploadingFiles.map(f => f.id));
+            this.uploadingFiles = this.uploadingFiles.filter(f => !newUploadingFileIds.has(f.id));
+        }
+    },
+    async handleDeleteDocument(docId) {
+      try {
+        await api.deleteDocument(docId);
+        this.documents = this.documents.filter(d => d.id !== docId);
+      } catch (error) {
+        console.error('Error deleting document:', error);
+      }
     },
     handleAnalyzeDocument(doc) {
-      const mockResults = {
-        document_points: [
-          {
-            point_number: 1,
-            point_content: "This is a mock analysis point for " + doc.name,
-            analysis_points: [
-              { cause: 'Mock Cause', risk: 'Высокий', recommendation: 'Mock Recommendation' },
-              { cause: 'Another Mock Cause', risk: 'Средний', recommendation: 'Another Mock Recommendation' }
-            ]
-          },
-          {
-            point_number: 2,
-            point_content: "This is another mock analysis point.",
-            analysis_points: [
-              { cause: 'Third Mock Cause', risk: 'Низкий', recommendation: 'Third Mock Recommendation' }
-            ]
-          }
-        ]
-      };
-      
-      sessionStorage.setItem('analysisResults', JSON.stringify(mockResults));
-      this.$router.push({ path: '/results', query: { fileName: doc.name } });
+      this.$router.push({ name: 'Analysis', params: { spaceId: this.selectedSpaceId, documentId: doc.id } });
+    },
+    async fetchSpaces() {
+        try {
+            const response = await api.getSpaces();
+            this.spaces = response.data.spaces || [];
+            
+            const spaceIdFromRoute = this.$route.params.spaceId;
+            if (spaceIdFromRoute && this.spaces.some(s => s.id === spaceIdFromRoute)) {
+                this.selectSpace(spaceIdFromRoute);
+            } else if (this.spaces.length > 0) {
+                this.selectSpace(this.spaces[0].id);
+            }
+        } catch (error) {
+            console.error('Error fetching spaces:', error);
+        }
     }
   },
   created() {
-    const spaceId = parseInt(this.$route.params.spaceId);
-    if (spaceId && this.spaces.some(s => s.id === spaceId)) {
-        this.selectedSpaceId = spaceId;
-    } else if (this.spaces.length > 0) {
-        this.selectedSpaceId = this.spaces[0].id;
-    } else {
-        this.selectedSpaceId = null;
+    this.fetchSpaces();
+  },
+  watch: {
+    '$route.params.spaceId'(newSpaceId) {
+      if (newSpaceId && newSpaceId !== this.selectedSpaceId) {
+        this.selectSpace(newSpaceId);
+      }
     }
   }
 };
@@ -245,8 +319,3 @@ export default {
     background-color: #2f855a;
 }
 </style> 
-
-.expand-btn.left:hover {
-  background-color: #1e293b;
-  color: #ffffff;
-}

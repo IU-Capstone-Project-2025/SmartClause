@@ -15,27 +15,11 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: AuthScreen,
-    beforeEnter: (to, from, next) => {
-      const isAuthenticated = localStorage.getItem('access_token');
-      if (isAuthenticated) {
-        next('/spaces/default');
-      } else {
-        next();
-      }
-    },
   },
   {
     path: '/processing',
     name: 'Processing',
     component: ProcessingScreen,
-    beforeEnter: (to, from, next) => {
-      const isAuthenticated = localStorage.getItem('access_token');
-      if (isAuthenticated) {
-        next();
-      } else {
-        next('/login');
-      }
-    },
   },
   {
     path: '/results',
@@ -43,15 +27,35 @@ const routes = [
     component: ResultsScreen,
   },
   {
-    path: '/spaces/:spaceId',
+    path: '/spaces/:spaceId/documents/:documentId/analysis',
+    name: 'Analysis',
+    component: ResultsScreen,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/spaces/:spaceId?',
     name: 'Chat',
     component: ChatScreen,
+    meta: { requiresAuth: true },
   },
 ];
 
 const router = createRouter({
   history: createWebHistory(process.env.BASE_URL),
   routes,
+});
+
+router.beforeEach((to, from, next) => {
+  const isAuthenticated = localStorage.getItem('access_token');
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+
+  if (requiresAuth && !isAuthenticated) {
+    next({ path: '/login', query: { redirect: to.fullPath } });
+  } else if (to.path === '/login' && isAuthenticated) {
+    next({ path: '/spaces', replace: true });
+  } else {
+    next();
+  }
 });
 
 export default router; 

@@ -4,7 +4,7 @@
       <div class="auth-box">
         <div class="auth-header">
           <h2 class="title">{{ isLogin ? 'Welcome Back' : 'Create Account' }}</h2>
-          <p class="subtitle">{{ isLogin ? 'Sign in to continue' : 'Join us to secure your deals' }}</p>
+          <p class="subtitle">{{ isLogin ? 'Login to continue' : 'Join us to secure your deals' }}</p>
         </div>
 
         <div v-if="error" class="error-message">
@@ -97,7 +97,8 @@ export default {
             password: this.form.password
           });
           localStorage.setItem('access_token', response.data.access_token);
-          this.$router.push('/spaces/default'); // Redirect to a default space
+          const redirectPath = this.$route.query.redirect || '/spaces';
+          this.$router.replace(redirectPath);
         } else {
           await axios.post('/api/auth/register', {
             username: this.form.username,
@@ -207,11 +208,12 @@ export default {
   width: 100%;
   background-color: #1e293b;
   border: 1px solid #3a4b68;
-  border-radius: 8px;
-  padding: 12px 15px;
+  border-radius: 10px;
+  padding: 15px;
   color: #ffffff;
   font-size: 16px;
   transition: border-color 0.3s, box-shadow 0.3s;
+  box-sizing: border-box;
 }
 
 .form-group input:focus {
@@ -230,11 +232,13 @@ export default {
   color: white;
   border: none;
   padding: 15px 30px;
+  margin-top: 20px;
   border-radius: 10px;
   font-size: 16px;
   cursor: pointer;
   transition: background-color 0.3s;
   font-weight: 600;
+  box-sizing: border-box;
 }
 
 .auth-button:hover {
