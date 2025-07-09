@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 
 @RestController
@@ -43,20 +44,26 @@ public class ChatController {
     })
     @GetMapping("/spaces/{spaceId}/messages")
     public ResponseEntity<?> getMessages(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
             @Parameter(description = "Maximum number of messages to retrieve") @RequestParam(defaultValue = "50") int limit,
             @Parameter(description = "Number of messages to skip") @RequestParam(defaultValue = "0") int offset) {
         
         try {
-            // Extract user ID from authorization header (for consistency with other endpoints)
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
-            ChatDto.GetMessagesResponse response = chatService.getMessages(spaceId, limit, offset, authorization);
+            // For service communication, get token and format as Bearer
+            String authToken = authUtils.extractTokenFromCookie(request);
+            if (authToken != null) {
+                authToken = "Bearer " + authToken;
+            }
+
+            ChatDto.GetMessagesResponse response = chatService.getMessages(spaceId, limit, offset, authToken);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
@@ -78,25 +85,31 @@ public class ChatController {
     })
     @PostMapping("/spaces/{spaceId}/messages")
     public ResponseEntity<?> sendMessage(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
-            @RequestBody ChatDto.SendMessageRequest request) {
+            @RequestBody ChatDto.SendMessageRequest requestBody) {
         
         try {
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
             // Validate request
-            if (request.getContent() == null || request.getContent().trim().isEmpty()) {
+            if (requestBody.getContent() == null || requestBody.getContent().trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                     .body(Map.of("error", "Message content cannot be empty"));
             }
 
-            ChatDto.SendMessageResponse response = chatService.sendMessage(spaceId, request, authorization);
+            // For service communication, get token and format as Bearer
+            String authToken = authUtils.extractTokenFromCookie(request);
+            if (authToken != null) {
+                authToken = "Bearer " + authToken;
+            }
+
+            ChatDto.SendMessageResponse response = chatService.sendMessage(spaceId, requestBody, authToken);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
@@ -118,18 +131,24 @@ public class ChatController {
     })
     @GetMapping("/spaces/{spaceId}/session")
     public ResponseEntity<?> getChatSession(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId) {
         
         try {
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
-            ChatDto.ChatSessionResponse response = chatService.getChatSession(spaceId, authorization);
+            // For service communication, get token and format as Bearer
+            String authToken = authUtils.extractTokenFromCookie(request);
+            if (authToken != null) {
+                authToken = "Bearer " + authToken;
+            }
+
+            ChatDto.ChatSessionResponse response = chatService.getChatSession(spaceId, authToken);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
@@ -151,25 +170,31 @@ public class ChatController {
     })
     @PutMapping("/spaces/{spaceId}/session/memory")
     public ResponseEntity<?> updateMemoryLength(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
-            @RequestBody ChatDto.ChatMemoryConfigRequest request) {
+            @RequestBody ChatDto.ChatMemoryConfigRequest requestBody) {
         
         try {
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
 
             // Validate memory length
-            if (request.getMemoryLength() < 1 || request.getMemoryLength() > 50) {
+            if (requestBody.getMemoryLength() < 1 || requestBody.getMemoryLength() > 50) {
                 return ResponseEntity.badRequest()
                     .body(Map.of("error", "Memory length must be between 1 and 50"));
             }
 
-            ChatDto.ChatSessionResponse response = chatService.updateMemoryLength(spaceId, request, authorization);
+            // For service communication, get token and format as Bearer
+            String authToken = authUtils.extractTokenFromCookie(request);
+            if (authToken != null) {
+                authToken = "Bearer " + authToken;
+            }
+
+            ChatDto.ChatSessionResponse response = chatService.updateMemoryLength(spaceId, requestBody, authToken);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
