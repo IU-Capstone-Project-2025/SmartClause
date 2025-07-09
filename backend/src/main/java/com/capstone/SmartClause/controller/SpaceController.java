@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,11 +41,12 @@ public class SpaceController {
     })
     @GetMapping
     public ResponseEntity<?> getAllSpaces(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization) {
+            HttpServletRequest request,
+            @Parameter(description = "Authorization header (optional, will try cookies first)") @RequestHeader(value = "Authorization", required = false) String authorization) {
         
         try {
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -71,24 +73,23 @@ public class SpaceController {
                 content = @Content(mediaType = "application/json"))
     })
     @PostMapping
-    public ResponseEntity<?> createSpace(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestBody SpaceDto.CreateSpaceRequest request) {
+    public ResponseEntity<?> createSpace(HttpServletRequest request,
+            @RequestBody SpaceDto.CreateSpaceRequest requestBody) {
         
         try {
-            if (request.getName() == null || request.getName().trim().isEmpty()) {
+            if (requestBody.getName() == null || requestBody.getName().trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                     .body(Map.of("error", "Space name is required"));
             }
 
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            SpaceDto.SpaceResponse space = spaceService.createSpace(request, userId);
+            SpaceDto.SpaceResponse space = spaceService.createSpace(requestBody, userId);
             
             return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("space", space));
@@ -109,15 +110,14 @@ public class SpaceController {
                 content = @Content(mediaType = "application/json"))
     })
     @GetMapping("/{spaceId}")
-    public ResponseEntity<?> getSpaceDetails(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+    public ResponseEntity<?> getSpaceDetails(HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
@@ -148,22 +148,21 @@ public class SpaceController {
                 content = @Content(mediaType = "application/json"))
     })
     @PutMapping("/{spaceId}")
-    public ResponseEntity<?> updateSpace(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+    public ResponseEntity<?> updateSpace(HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId,
-            @RequestBody SpaceDto.UpdateSpaceRequest request) {
+            @RequestBody SpaceDto.UpdateSpaceRequest requestBody) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            Optional<SpaceDto.SpaceResponse> updatedSpaceOpt = spaceService.updateSpace(spaceUuid, request, userId);
+            Optional<SpaceDto.SpaceResponse> updatedSpaceOpt = spaceService.updateSpace(spaceUuid, requestBody, userId);
             
             if (updatedSpaceOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -187,15 +186,14 @@ public class SpaceController {
                 content = @Content(mediaType = "application/json"))
     })
     @DeleteMapping("/{spaceId}")
-    public ResponseEntity<?> deleteSpace(
-            @Parameter(description = "Authorization header") @RequestHeader(value = "Authorization", required = false) String authorization,
+    public ResponseEntity<?> deleteSpace(HttpServletRequest request,
             @Parameter(description = "Space ID") @PathVariable String spaceId) {
         
         try {
             UUID spaceUuid = UUID.fromString(spaceId);
             
-            // Extract user ID from authorization header
-            String userId = authUtils.extractUserIdFromHeader(authorization);
+            // Extract user ID from cookies or authorization header
+            String userId = authUtils.extractUserIdFromRequest(request, null);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));

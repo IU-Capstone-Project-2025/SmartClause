@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS rule_chunks (
 CREATE TABLE IF NOT EXISTS analysis_results (
     id SERIAL PRIMARY KEY,
     document_id VARCHAR(255),
+    user_id VARCHAR(255),
     analysis_points JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -45,4 +46,8 @@ CREATE INDEX IF NOT EXISTS rules_rule_number_idx ON rules (rule_number);
 CREATE INDEX IF NOT EXISTS rules_file_idx ON rules (file);
 CREATE INDEX IF NOT EXISTS rule_chunks_rule_id_idx ON rule_chunks (rule_id);
 CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id, chunk_number);
+
+-- Indexes for analysis results
 CREATE INDEX IF NOT EXISTS analysis_results_document_id_idx ON analysis_results (document_id);
+CREATE INDEX IF NOT EXISTS analysis_results_user_id_idx ON analysis_results (user_id);
+CREATE INDEX IF NOT EXISTS analysis_results_document_user_idx ON analysis_results (document_id, user_id); 
