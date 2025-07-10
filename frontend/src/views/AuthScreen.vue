@@ -15,27 +15,33 @@
           <div v-if="!isLogin" class="form-grid">
             <div class="form-group">
               <label for="firstname">First Name</label>
-              <input type="text" id="firstname" v-model="form.first_name" required>
+              <input type="text" id="firstname" v-model="form.first_name" required placeholder="Enter your first name">
             </div>
             <div class="form-group">
               <label for="lastname">Last Name</label>
-              <input type="text" id="lastname" v-model="form.last_name" required>
+              <input type="text" id="lastname" v-model="form.last_name" required placeholder="Enter your last name">
             </div>
           </div>
 
           <div class="form-group" v-if="!isLogin">
             <label for="username">Username</label>
-            <input type="text" id="username" v-model="form.username" required>
+            <input type="text" id="username" v-model="form.username" required placeholder="Choose a username">
           </div>
 
           <div class="form-group">
             <label for="email">{{ isLogin ? 'Email or Username' : 'Email' }}</label>
-            <input type="text" id="email" v-model="form.username_or_email" required>
+            <input type="text" id="email" v-model="form.username_or_email" required :placeholder="isLogin ? 'Enter your email or username' : 'Enter your email'">
           </div>
 
           <div class="form-group">
             <label for="password">Password</label>
-            <input type="password" id="password" v-model="form.password" required>
+            <div class="password-input-wrapper">
+              <input :type="showPassword ? 'text' : 'password'" id="password" v-model="form.password" required :minlength="isLogin ? null : 6" placeholder="Enter your password">
+              <button type="button" class="toggle-password-visibility" @click="togglePasswordVisibility">
+                <i :class="showPassword ? 'far fa-eye' : 'far fa-eye-slash'"></i>
+              </button>
+            </div>
+            <p v-if="!isLogin" class="password-hint">Must be at least 6 characters.</p>
           </div>
 
           <div class="form-actions">
@@ -48,7 +54,7 @@
         <div class="switch-auth">
           <p>
             {{ isLogin ? "Don't have an account?" : "Already have an account?" }}
-            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? 'Sign Up' : 'Sign In' }}</a>
+            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? 'Sign Up' : 'Log In' }}</a>
           </p>
         </div>
       </div>
@@ -72,7 +78,8 @@ export default {
         first_name: '',
         last_name: ''
       },
-      error: null
+      error: null,
+      showPassword: false
     };
   },
   methods: {
@@ -88,6 +95,9 @@ export default {
       this.form.first_name = '';
       this.form.last_name = '';
     },
+    togglePasswordVisibility() {
+      this.showPassword = !this.showPassword;
+    },
     async handleSubmit() {
       this.error = null;
       try {
@@ -100,6 +110,10 @@ export default {
           const redirectPath = this.$route.query.redirect || '/spaces';
           this.$router.replace(redirectPath);
         } else {
+          if (this.form.password.length < 6) {
+            this.error = 'Password must be at least 6 characters long.';
+            return;
+          }
           await axios.post('/api/auth/register', {
             username: this.form.username,
             email: this.form.username_or_email,
@@ -216,10 +230,42 @@ export default {
   box-sizing: border-box;
 }
 
+.password-hint {
+  font-size: 12px;
+  color: #a0aec0;
+  margin-top: 5px;
+}
+
 .form-group input:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+}
+
+.password-input-wrapper {
+  position: relative;
+}
+
+.password-input-wrapper input {
+  padding-right: 40px; /* Make space for the eye icon */
+}
+
+.toggle-password-visibility {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 5px;
+  outline: none;
+}
+
+.toggle-password-visibility:hover {
+  color: #ffffff;
 }
 
 .form-actions {

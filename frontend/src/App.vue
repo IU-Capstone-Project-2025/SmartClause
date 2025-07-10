@@ -5,6 +5,10 @@
         <svg class="logo-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
         <span class="logo-text">SmartClause</span>
       </div>
+      <button class="login-button" v-if="showActionButtonInNavBar" @click="handleActionClick">
+        <component :is="buttonIcon" :size="20" />
+        {{ buttonText }}
+      </button>
     </header>
     <main class="main-content" :class="{ 'with-navbar': showNavBar }">
       <transition name="fade" mode="out-in">
@@ -16,12 +20,32 @@
 
 <script>
 import axios from 'axios';
+import { LogIn, Folder } from 'lucide-vue-next';
 
 export default {
   name: 'App',
+  components: {
+    LogIn,
+    Folder,
+  },
   computed: {
     showNavBar() {
       return this.$route.name !== 'Chat';
+    },
+    isUserAuthorized() {
+      if (typeof window.localStorage !== 'undefined') {
+        return !!localStorage.getItem('access_token');
+      }
+      return false;
+    },
+    showActionButtonInNavBar() {
+      return this.$route.name === 'Upload';
+    },
+    buttonText() {
+      return this.isUserAuthorized ? 'Spaces' : 'Log In';
+    },
+    buttonIcon() {
+      return this.isUserAuthorized ? 'Folder' : 'LogIn';
     }
   },
   async created() {
@@ -39,6 +63,13 @@ export default {
   methods: {
     goHome() {
       this.$router.push('/');
+    },
+    handleActionClick() {
+      if (this.isUserAuthorized) {
+        this.$router.push({ name: 'Chat' });
+      } else {
+        this.$router.push({ name: 'Login' });
+      }
     }
   }
 }
@@ -57,6 +88,9 @@ export default {
   background-color: #0c1a2e;
   color: #ffffff;
   border-bottom: 1px solid #1e293b;
+  display: flex; /* Add flex to align items */
+  justify-content: space-between; /* Space out logo and button */
+  align-items: center; /* Center items vertically */
 }
 
 .main-content.with-navbar {
@@ -78,6 +112,26 @@ export default {
 .logo-text {
   font-size: 20px;
   font-weight: 700;
+}
+
+.login-button {
+  background-color: rgba(30, 41, 59, 0.5);
+  color: white;
+  border: 1px solid #3a4b68;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.login-button:hover {
+  background-color: rgba(30, 41, 59, 0.7);
+  border-color: #4a5b78;
 }
 
 body {

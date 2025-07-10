@@ -3,7 +3,7 @@
     <button v-if="isSpacesSidebarCollapsed" @click="toggleSpacesSidebar" class="expand-btn left" title="Open sidebar">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.84l8.57 3.91a2 2 0 0 0 1.66 0l8.57-3.91a1 1 0 0 0 0-1.84Z"/><path d="m22 17.65-8.57 3.91a2 2 0 0 1-1.66 0L3.2 17.65"/><path d="m22 12.65-8.57 3.91a2 2 0 0 1-1.66 0L3.2 12.65"/></svg>
     </button>
-     <button v-if="isDocumentsSidebarCollapsed" @click="toggleDocumentsSidebar" class="expand-btn right upload-btn" title="Open sidebar">
+     <button v-if="isDocumentsSidebarCollapsed && selectedSpaceId" @click="toggleDocumentsSidebar" class="expand-btn right upload-btn" title="Open sidebar">
        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
        Upload
     </button>
@@ -27,13 +27,14 @@
     />
     
     <DocumentsSidebar
+      v-if="selectedSpaceId"
+      :space-id="selectedSpaceId"
       :documents="documents"
-      :uploading-files="uploadingFiles"
+      :uploading-files="uploadingFiles[selectedSpaceId] || []"
       :is-collapsed="isDocumentsSidebarCollapsed"
       @upload-files="handleFileUpload"
       @toggle-collapse="toggleDocumentsSidebar"
       @delete-document="handleDeleteDocument"
-      @analyze-document="handleAnalyzeDocument"
     />
   </div>
 </template>
@@ -60,7 +61,7 @@ export default {
       spaces: [],
       messages: [],
       documents: [],
-      uploadingFiles: [],
+      uploadingFiles: {},
     };
   },
   computed: {
@@ -187,29 +188,33 @@ export default {
     async handleFileUpload(files) {
         if (!files.length || !this.selectedSpaceId) return;
         
+        const currentSpaceId = this.selectedSpaceId;
+
         const newUploadingFiles = Array.from(files).map(file => ({
             id: `uploading-${file.name}-${Date.now()}`,
             name: file.name,
         }));
         
-        this.uploadingFiles = [...this.uploadingFiles, ...newUploadingFiles];
+        this.uploadingFiles[currentSpaceId] = [...(this.uploadingFiles[currentSpaceId] || []), ...newUploadingFiles];
 
         try {
-            await Promise.all(Array.from(files).map(file => api.uploadDocument(this.selectedSpaceId, file)));
+            await Promise.all(Array.from(files).map(file => api.uploadDocument(currentSpaceId, file)));
         } catch (error) {
             console.error('Error uploading files:', error);
             // Here you could add more user-facing error handling
         } finally {
             // Refresh the documents list from the server
             try {
-                const documentsRes = await api.getDocuments(this.selectedSpaceId);
+                const documentsRes = await api.getDocuments(currentSpaceId);
                 this.documents = documentsRes.data.documents || [];
             } catch (e) {
                 console.error('Error fetching documents after upload:', e);
             }
             // Remove the files that were just being uploaded from the uploadingFiles list
             const newUploadingFileIds = new Set(newUploadingFiles.map(f => f.id));
-            this.uploadingFiles = this.uploadingFiles.filter(f => !newUploadingFileIds.has(f.id));
+            if (this.uploadingFiles[currentSpaceId]) {
+                this.uploadingFiles[currentSpaceId] = this.uploadingFiles[currentSpaceId].filter(f => !newUploadingFileIds.has(f.id));
+            }
         }
     },
     async handleDeleteDocument(docId) {
@@ -219,9 +224,6 @@ export default {
       } catch (error) {
         console.error('Error deleting document:', error);
       }
-    },
-    handleAnalyzeDocument(doc) {
-      this.$router.push({ name: 'Analysis', params: { spaceId: this.selectedSpaceId, documentId: doc.id } });
     },
     async fetchSpaces() {
         try {
