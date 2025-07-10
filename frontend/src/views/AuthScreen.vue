@@ -54,7 +54,7 @@
         <div class="switch-auth">
           <p>
             {{ isLogin ? "Don't have an account?" : "Already have an account?" }}
-            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? 'Sign Up' : 'Sign In' }}</a>
+            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? 'Sign Up' : 'Log In' }}</a>
           </p>
         </div>
       </div>
