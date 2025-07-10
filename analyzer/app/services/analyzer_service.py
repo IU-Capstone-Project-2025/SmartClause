@@ -62,64 +62,49 @@ class AnalyzerService(RetryMixin):
             analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
             
             # Filter out points with empty analysis lists
-            logger.info(f"Before filtering: {len(analyzed_points)} points analyzed")
-            for i, point in enumerate(analyzed_points):
-                logger.info(f"Point {point.point_number}: has {len(point.analysis_points)} analysis points")
+            logger.info(f"Analyzed {len(analyzed_points)} points. No filtering will be applied to keep all content.")
             
-            filtered_points = [
-                point for point in analyzed_points 
-                if len(point.analysis_points) > 0
-            ]
-            
-            logger.info(f"After filtering: {len(filtered_points)} points kept, {len(analyzed_points) - len(filtered_points)} points filtered out")
-            
-            # Log which points were filtered out
-            for point in analyzed_points:
-                if len(point.analysis_points) == 0:
-                    logger.warning(f"Point {point.point_number} was filtered out - has empty analysis_points list")
-            
-            # Calculate success metrics from filtered points
+            # Calculate success metrics from all points
             successful_points = sum(
-                1 for point in filtered_points 
+                1 for point in analyzed_points
                 if (len(point.analysis_points) > 0 and 
                     point.analysis_points[0].cause != "Не удалось провести автоматический анализ")
             )
             
             # Calculate validation metrics
-            validated_points = len(filtered_points)
+            validated_points = sum(1 for point in analyzed_points if len(point.analysis_points) > 0)
             invalidated_points = len(analyzed_points) - validated_points
             
-            total_points = len(filtered_points)
+            total_points = len(analyzed_points)
             total_duration = (datetime.now() - analysis_start).total_seconds()
             
             # Calculate success rate, avoiding division by zero
             if total_points > 0:
-                success_rate = (successful_points / total_points) * 100
+                success_rate = (successful_points / total_points) * 100 if total_points > 0 else 0
                 logger.info(
                     f"Analysis completed in {total_duration:.2f}s "
                     f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
                     f"Success rate: {successful_points}/{total_points} "
                     f"({success_rate:.1f}%) - "
-                    f"Validation: {validated_points} kept, {invalidated_points} filtered out"
+                    f"Validation: {validated_points} with issues, {invalidated_points} with no issues"
                 )
             else:
                 logger.info(
                     f"Analysis completed in {total_duration:.2f}s "
                     f"(parsing: {parse_duration:.2f}s, analysis: {analysis_duration:.2f}s) - "
-                    f"All {len(analyzed_points)} points were filtered out by validation - "
-                    f"no issues found or all analysis points were invalidated"
+                    f"No points were analyzed."
                 )
             
-            # Create response with filtered points
+            # Create response with all analyzed points
             all_analysis_points = []
-            for analyzed_point in filtered_points:
+            for analyzed_point in analyzed_points:
                 all_analysis_points.extend(analyzed_point.analysis_points)
             
             response = AnalyzeResponse(
-                document_points=filtered_points,
+                document_points=analyzed_points,
                 document_id=request.id,
                 document_metadata=document_metadata,
-                total_points=len(filtered_points),
+                total_points=len(analyzed_points),
                 analysis_timestamp=datetime.now().isoformat(),
                 points=all_analysis_points  # For backward compatibility
             )
