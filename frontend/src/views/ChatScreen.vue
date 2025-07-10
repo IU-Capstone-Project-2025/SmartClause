@@ -28,13 +28,13 @@
     
     <DocumentsSidebar
       v-if="selectedSpaceId"
+      :space-id="selectedSpaceId"
       :documents="documents"
       :uploading-files="uploadingFiles[selectedSpaceId] || []"
       :is-collapsed="isDocumentsSidebarCollapsed"
       @upload-files="handleFileUpload"
       @toggle-collapse="toggleDocumentsSidebar"
       @delete-document="handleDeleteDocument"
-      @analyze-document="handleAnalyzeDocument"
     />
   </div>
 </template>
@@ -224,9 +224,6 @@ export default {
       } catch (error) {
         console.error('Error deleting document:', error);
       }
-    },
-    handleAnalyzeDocument(doc) {
-      this.$router.push({ name: 'Analysis', params: { spaceId: this.selectedSpaceId, documentId: doc.id } });
     },
     async fetchSpaces() {
         try {

@@ -4,6 +4,7 @@ import ProcessingScreen from '../views/ProcessingScreen.vue';
 import ResultsScreen from '../views/ResultsScreen.vue';
 import ChatScreen from '../views/ChatScreen.vue';
 import AuthScreen from '../views/AuthScreen.vue';
+import DocumentAnalysis from '../views/DocumentAnalysis.vue';
 
 const routes = [
   {
@@ -29,7 +30,7 @@ const routes = [
   {
     path: '/spaces/:spaceId/documents/:documentId/analysis',
     name: 'Analysis',
-    component: ResultsScreen,
+    component: DocumentAnalysis,
     meta: { requiresAuth: true },
   },
   {
