@@ -1,7 +1,6 @@
 from typing import List, Dict, Any, Optional
 import logging
 import httpx
-import asyncio
 from pydantic import BaseModel
 
 from ..core.config import settings
@@ -13,7 +12,7 @@ class RetrieveRequest(BaseModel):
     """Request schema for analyzer retrieve endpoint"""
     query: str
     k: int = 5
-    distance_function: str = "cosine"
+    distance_function: str = "l2"
 
 
 class RetrieveResult(BaseModel):
@@ -33,24 +32,24 @@ class RetrieveResponse(BaseModel):
 
 
 class RetrievalService:
-    """Service for integrating with analyzer microservice retrieval endpoints"""
+    """Service for retrieving legal rules from the analyzer microservice"""
     
     def __init__(self):
         self.analyzer_base_url = settings.analyzer_base_url
         self.timeout = 30.0
     
-    async def retrieve_legal_context(
+    async def retrieve_legal_rules(
         self,
         query: str,
-        k: int = 5,
-        distance_function: str = "cosine",
+        k: int = 10,
+        distance_function: str = "l2",
         auth_token: str = None
     ) -> Optional[RetrieveResponse]:
         """
-        Retrieve legal context from analyzer microservice using /retrieve-rules endpoint
+        Retrieve legal rules from analyzer microservice using /retrieve-rules endpoint
         
         Args:
-            query: Search query for legal context
+            query: Search query for legal rules
             k: Number of results to retrieve
             distance_function: Distance function to use
             auth_token: JWT token for authorization
@@ -73,7 +72,7 @@ class RetrievalService:
                 headers["Authorization"] = f"Bearer {auth_token}"
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                logger.debug(f"Requesting legal context from {url} with query: '{query[:50]}...'")
+                logger.debug(f"Requesting legal rules from {url} with query: '{query[:50]}...'")
                 
                 response = await client.post(
                     url,
@@ -91,136 +90,11 @@ class RetrievalService:
                     return None
                     
         except httpx.TimeoutException:
-            logger.error(f"Timeout retrieving legal context from analyzer service")
+            logger.error(f"Timeout retrieving legal rules from analyzer service")
             return None
         except Exception as e:
-            logger.error(f"Error retrieving legal context: {e}")
+            logger.error(f"Error retrieving legal rules: {e}")
             return None
-    
-    async def retrieve_document_chunks(
-        self,
-        query: str,
-        k: int = 5,
-        distance_function: str = "cosine",
-        auth_token: str = None
-    ) -> Optional[RetrieveResponse]:
-        """
-        Retrieve document chunks from analyzer microservice using /retrieve-chunk endpoint
-        
-        Args:
-            query: Search query for document chunks
-            k: Number of results to retrieve
-            distance_function: Distance function to use
-            auth_token: JWT token for authorization
-            
-        Returns:
-            RetrieveResponse or None if error
-        """
-        try:
-            request_data = RetrieveRequest(
-                query=query,
-                k=k,
-                distance_function=distance_function
-            )
-            
-            url = f"{self.analyzer_base_url}/retrieve-chunk"
-            
-            # Set up headers with authentication if token is provided
-            headers = {"Content-Type": "application/json"}
-            if auth_token:
-                headers["Authorization"] = f"Bearer {auth_token}"
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                logger.debug(f"Requesting document chunks from {url} with query: '{query[:50]}...'")
-                
-                response = await client.post(
-                    url,
-                    json=request_data.dict(),
-                    headers=headers
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    result = RetrieveResponse(**data)
-                    logger.debug(f"Retrieved {len(result.results)} document chunks for query")
-                    return result
-                else:
-                    logger.error(f"Analyzer retrieve-chunk error: {response.status_code} - {response.text}")
-                    return None
-                    
-        except httpx.TimeoutException:
-            logger.error(f"Timeout retrieving document chunks from analyzer service")
-            return None
-        except Exception as e:
-            logger.error(f"Error retrieving document chunks: {e}")
-            return None
-    
-    async def get_combined_context(
-        self,
-        query: str,
-        k_rules: int = 3,
-        k_chunks: int = 3,
-        auth_token: str = None
-    ) -> Dict[str, Any]:
-        """
-        Get combined context from both legal rules and document chunks
-        
-        Args:
-            query: Search query
-            k_rules: Number of legal rules to retrieve
-            k_chunks: Number of document chunks to retrieve
-            auth_token: JWT token for authorization
-            
-        Returns:
-            Dictionary with legal and document context
-        """
-        try:
-            # Retrieve both legal rules and document chunks in parallel
-            legal_task = self.retrieve_legal_context(query, k_rules, auth_token=auth_token)
-            chunks_task = self.retrieve_document_chunks(query, k_chunks, auth_token=auth_token)
-            
-            legal_response, chunks_response = await asyncio.gather(
-                legal_task, chunks_task, return_exceptions=True
-            )
-            
-            context = {
-                "legal_rules": [],
-                "document_chunks": [],
-                "query": query
-            }
-            
-            # Process legal rules response
-            if isinstance(legal_response, RetrieveResponse):
-                for result in legal_response.results:
-                    context["legal_rules"].append({
-                        "text": result.text,
-                        "metadata": result.metadata,
-                        "similarity_score": result.similarity_score
-                    })
-            elif isinstance(legal_response, Exception):
-                logger.error(f"Error retrieving legal rules: {legal_response}")
-            
-            # Process document chunks response
-            if isinstance(chunks_response, RetrieveResponse):
-                for result in chunks_response.results:
-                    context["document_chunks"].append({
-                        "text": result.text,
-                        "metadata": result.metadata,
-                        "similarity_score": result.similarity_score
-                    })
-            elif isinstance(chunks_response, Exception):
-                logger.error(f"Error retrieving document chunks: {chunks_response}")
-            
-            logger.debug(f"Combined context: {len(context['legal_rules'])} rules, {len(context['document_chunks'])} chunks")
-            return context
-            
-        except Exception as e:
-            logger.error(f"Error getting combined context: {e}")
-            return {
-                "legal_rules": [],
-                "document_chunks": [],
-                "query": query
-            }
     
     async def check_analyzer_health(self) -> bool:
         """Check if analyzer service is healthy"""
@@ -235,48 +109,35 @@ class RetrievalService:
             logger.error(f"Analyzer health check failed: {e}")
             return False
     
-    def format_context_for_llm(self, context: Dict[str, Any]) -> str:
-        """Format retrieved context for LLM consumption"""
+    def format_rules_for_llm(self, retrieve_response: RetrieveResponse) -> str:
+        """Format retrieved legal rules for LLM consumption"""
         try:
-            formatted_parts = []
+            if not retrieve_response or not retrieve_response.results:
+                return ""
             
-            # Add legal rules context
-            if context.get("legal_rules"):
-                formatted_parts.append("=== RELEVANT LEGAL RULES ===")
-                for i, rule in enumerate(context["legal_rules"], 1):
-                    metadata = rule.get("metadata", {})
-                    rule_title = metadata.get("rule_title", "")
-                    file_name = metadata.get("file_name", "")
-                    
-                    if rule_title:
-                        formatted_parts.append(f"\n{i}. {rule_title}")
-                        if file_name:
-                            formatted_parts.append(f"   Source: {file_name}")
-                        formatted_parts.append(f"   Content: {rule['text']}")
-                    else:
-                        formatted_parts.append(f"\n{i}. {rule['text']}")
-                        if file_name:
-                            formatted_parts.append(f"   Source: {file_name}")
+            formatted_parts = ["=== RELEVANT LEGAL RULES ==="]
             
-            # Add document chunks context
-            if context.get("document_chunks"):
-                if formatted_parts:  # Add separator if we have legal rules
-                    formatted_parts.append("\n")
-                formatted_parts.append("=== RELEVANT DOCUMENT EXCERPTS ===")
-                for i, chunk in enumerate(context["document_chunks"], 1):
-                    metadata = chunk.get("metadata", {})
-                    file_name = metadata.get("file_name", "")
-                    
-                    formatted_parts.append(f"\n{i}. {chunk['text']}")
+            for i, rule in enumerate(retrieve_response.results, 1):
+                metadata = rule.metadata
+                rule_title = metadata.get("rule_title", "")
+                file_name = metadata.get("file_name", "")
+                
+                if rule_title:
+                    formatted_parts.append(f"\n{i}. {rule_title}")
+                    if file_name:
+                        formatted_parts.append(f"   Source: {file_name}")
+                    formatted_parts.append(f"   Content: {rule.text}")
+                else:
+                    formatted_parts.append(f"\n{i}. {rule.text}")
                     if file_name:
                         formatted_parts.append(f"   Source: {file_name}")
             
             result = "\n".join(formatted_parts)
-            logger.debug(f"Formatted context: {len(result)} characters")
+            logger.debug(f"Formatted {len(retrieve_response.results)} legal rules: {len(result)} characters")
             return result
             
         except Exception as e:
-            logger.error(f"Error formatting context for LLM: {e}")
+            logger.error(f"Error formatting legal rules for LLM: {e}")
             return ""
 
 

@@ -8,6 +8,7 @@ import io
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import logging
+import asyncio
 
 from jinja2 import Environment, DictLoader
 try:
@@ -22,14 +23,121 @@ logger = logging.getLogger(__name__)
 
 
 class ExportService:
-    """Service for exporting analysis results in various formats"""
+    """
+    Service for exporting analysis results in various formats
+    
+    Features:
+    - PDF export with professional legal report formatting
+    - LLM-generated executive summary/abstract of all analysis issues
+    - Statistics and risk categorization
+    - Detailed analysis breakdown by document points
+    
+    The PDF export includes:
+    1. Executive Summary: LLM-generated abstract of key issues and risks
+    2. Statistical Overview: Counts of points, issues, and risk levels
+    3. Detailed Analysis: Point-by-point legal analysis with recommendations
+    
+    The LLM summary provides a concise 2-3 sentence overview that:
+    - Summarizes the main types of legal issues found
+    - Indicates overall risk level
+    - Provides general recommendations for the document
+    """
     
     def __init__(self):
         self.jinja_env = Environment(loader=DictLoader(self._get_templates()))
         self.font_config = FontConfiguration() if WEASYPRINT_AVAILABLE else None
+        self._analyzer_service = None
     
+    def _get_analyzer_service(self):
+        """Lazy load analyzer service to access LLM client"""
+        if self._analyzer_service is None:
+            from .analyzer_service import analyzer_service
+            self._analyzer_service = analyzer_service
+        return self._analyzer_service
 
-    def export_analysis_pdf(self, analysis_data: Dict[str, Any]) -> bytes:
+    async def _generate_analysis_summary(self, analysis_data: Dict[str, Any]) -> str:
+        """
+        Generate a concise summary/abstract of all analysis issues using LLM
+        
+        Args:
+            analysis_data: Analysis results dictionary
+            
+        Returns:
+            str: Generated summary text
+        """
+        try:
+            analyzer = self._get_analyzer_service()
+            
+            # Extract all issues from analysis data
+            document_points = analysis_data.get('document_points', [])
+            all_issues = []
+            
+            for point in document_points:
+                for analysis_point in point.get('analysis_points', []):
+                    all_issues.append({
+                        'point_number': point.get('point_number', ''),
+                        'point_type': point.get('point_type', ''),
+                        'cause': analysis_point.get('cause', ''),
+                        'risk': analysis_point.get('risk', ''),
+                        'recommendation': analysis_point.get('recommendation', '')
+                    })
+            
+            if not all_issues:
+                return "В ходе анализа документа существенных правовых проблем или рисков не выявлено. Документ соответствует основным требованиям российского законодательства."
+            
+            # Create prompt for summary generation
+            issues_text = ""
+            for i, issue in enumerate(all_issues, 1):
+                issues_text += f"{i}. Пункт {issue['point_number']} ({issue['point_type']}): {issue['cause']} - {issue['risk']}\n"
+            
+            prompt = f"""
+Ты — старший юрист-аналитик. Твоя задача — создать краткое резюме (abstract) правового анализа документа.
+
+НАЙДЕННЫЕ ПРОБЛЕМЫ И РИСКИ:
+{issues_text}
+
+ЗАДАЧА:
+Создай краткое резюме (2-3 предложения) который:
+1. Обобщает основные типы выявленных проблем
+2. Указывает общий уровень правовых рисков
+3. Дает общую рекомендацию по документу
+
+ТРЕБОВАНИЯ:
+- Максимум 150 слов
+- Профессиональный юридический стиль
+- Конкретные выводы без лишней детализации
+- На русском языке
+
+ФОРМАТ ОТВЕТА:
+Простой текст без форматирования, markdown или JSON.
+
+ПРИМЕР:
+"Анализ выявил 5 существенных правовых проблем, включая неопределенные сроки исполнения и несбалансированные штрафные санкции. Общий уровень правовых рисков оценивается как средний с элементами высокого риска в области ответственности сторон. Рекомендуется доработка договора с уточнением ключевых условий и приведением спорных пунктов в соответствие с требованиями ГК РФ."
+"""
+            
+            # Call LLM to generate summary
+            summary = await analyzer._call_llm(prompt, temperature=0.3)
+            
+            # Clean and validate summary
+            summary = summary.strip()
+            if not summary or len(summary) < 20:
+                return f"Анализ выявил {len(all_issues)} правовых проблем различного уровня сложности. Рекомендуется внимательное изучение каждого пункта и консультация с юристом для устранения выявленных недочетов."
+            
+            logger.info(f"Generated analysis summary: {len(summary)} characters")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to generate analysis summary: {e}")
+            # Fallback summary
+            document_points = analysis_data.get('document_points', [])
+            total_issues = sum(len(point.get('analysis_points', [])) for point in document_points)
+            
+            if total_issues == 0:
+                return "В ходе анализа документа существенных правовых проблем или рисков не выявлено."
+            else:
+                return f"Анализ выявил {total_issues} потенциальных правовых проблем. Рекомендуется детальное изучение каждого пункта и консультация с квалифицированным юристом."
+
+    async def export_analysis_pdf(self, analysis_data: Dict[str, Any]) -> bytes:
         """
         Export analysis as PDF report
         
@@ -43,8 +151,13 @@ class ExportService:
             raise ValueError("WeasyPrint is not available. Please install weasyprint to enable PDF export.")
             
         try:
+            # Generate analysis summary using LLM
+            logger.info("Generating analysis summary using LLM...")
+            analysis_summary = await self._generate_analysis_summary(analysis_data)
+            
             # Prepare template data
             template_data = self._prepare_template_data(analysis_data)
+            template_data['analysis_summary'] = analysis_summary
             
             # Render HTML
             template = self.jinja_env.get_template('analysis_report')
@@ -60,7 +173,7 @@ class ExportService:
         except Exception as e:
             logger.error(f"Error exporting PDF: {e}")
             raise ValueError(f"Failed to export PDF: {e}")
-    
+
     def _prepare_template_data(self, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare data for template rendering"""
         
@@ -113,6 +226,13 @@ class ExportService:
             <p class="timestamp">Создан: {{ generation_timestamp }}</p>
         </div>
     </div>
+    
+    {% if analysis_summary %}
+    <div class="executive-summary">
+        <h2>Резюме анализа</h2>
+        <p class="summary-text">{{ analysis_summary }}</p>
+    </div>
+    {% endif %}
     
     <div class="summary">
         <h2>Краткий обзор</h2>
@@ -259,6 +379,30 @@ class ExportService:
             color: #666;
             font-size: 10pt;
             margin: 2px 0;
+        }
+        
+        .executive-summary {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0c1a2e;
+        }
+        
+        .executive-summary h2 {
+            color: #0c1a2e;
+            font-size: 16pt;
+            margin: 0 0 15px 0;
+            font-weight: bold;
+        }
+        
+        .summary-text {
+            font-size: 12pt;
+            line-height: 1.7;
+            margin: 0;
+            color: #1e293b;
+            font-weight: 500;
+            text-align: justify;
         }
         
         .summary {
@@ -488,7 +632,7 @@ class ExportService:
             raise ValueError("Analysis data is empty for the specified document")
 
         # Generate PDF using existing helper.
-        pdf_bytes = self.export_analysis_pdf(analysis_data)
+        pdf_bytes = await self.export_analysis_pdf(analysis_data)
         return pdf_bytes
 
 
