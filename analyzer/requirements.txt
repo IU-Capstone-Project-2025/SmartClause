@@ -35,6 +35,7 @@ python-dotenv>=1.0.0
 # Data processing (used in scripts)
 pandas>=2.0.0
 tqdm>=4.64.0
+nltk>=3.9
 
 # PDF Export functionality
 weasyprint>=61.0

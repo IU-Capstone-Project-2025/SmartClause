@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 import time
+import nltk
+from nltk.tokenize import work_tokenize
+from nltk.corpus import stopwords
 
 
 from ..schemas.requests import RetrieveRequest
@@ -54,7 +57,7 @@ class RetrievalService:
         t0 = time.perf_counter()
 
         # --- encode -------------------------------------------------------
-        q_vec: List[float] = embedding_service.encode_to_list(request.query)
+        q_vec: List[float] = embedding_service.encode_to_list(self.preprocess_query(request.query))
         q_vec_pg = f"[{','.join(f'{x:.6f}' for x in q_vec)}]"
         t1 = time.perf_counter(); timings["encode_ms"] = (t1 - t0) * 1000
 
@@ -111,7 +114,7 @@ class RetrievalService:
             sql,
             {
                 "c": self._C_RRF,
-                "q": request.query,
+                "q": self.preprocess_query(request.query),
                 "q_vec": q_vec_pg,
                 "k_vec": k_vec,
                 "k_lex": k_lex,
@@ -196,6 +199,25 @@ class RetrievalService:
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
+
+    def preprocess_query(self, query: str) -> str:
+        stop_words = stopwords.words('russian')
+        keywords = ["статья", "глава", "часть", "пункта", "№", "закона", "от", "законов"]
+
+        query = query.lower()
+
+        tokens = word_tokenize(query, 'russian')
+        processed_tokens = []
+        for i, token in enumerate(tokens):
+            if token not in stop_words:
+                if (token.isnumeric() or not token.isalnum()) and len(token) != 1:
+                    if i > 0 and tokens[i-1] in keywords:
+                        processed_tokens.append(token)
+                else:
+                    processed_tokens.append(token)
+
+        return " ".join(processed_tokens)
+
 
     def get_all_embeddings_and_labels(self, db: Session) -> Tuple[List[List[float]], List[str]]:
         sql = text("SELECT rc.embedding, r.file FROM rule_chunks rc JOIN rules r ON r.rule_id = rc.rule_id")
