@@ -5,7 +5,7 @@ from sqlalchemy import text
 import logging
 import time
 import nltk
-from nltk.tokenize import work_tokenize
+from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
 
