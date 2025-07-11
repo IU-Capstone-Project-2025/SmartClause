@@ -26,7 +26,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download nltk files
-COPY scripts/setup_nltk.py
+COPY scripts/setup_nltk.py .
 RUN python setup_nltk.py
 
 # Install the embedding model
