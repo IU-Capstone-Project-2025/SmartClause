@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 import logging
 import asyncio
+import re
 from sqlalchemy.orm import Session
 from openai import OpenAI
 from ..core.config import settings
@@ -32,6 +33,57 @@ class AnalyzerService(RetryMixin):
         else:
             logger.error("OpenRouter API key not found. Analysis will fail without proper LLM configuration.")
             raise ValueError("OpenRouter API key is required for analysis functionality")
+
+    def _extract_risk_level(self, risk_text: str) -> int:
+        """
+        Extract risk level from risk text and return numeric value for sorting.
+        Higher numbers = higher risk priority.
+        
+        Args:
+            risk_text: The risk description text containing risk level
+            
+        Returns:
+            int: 3 for High, 2 for Medium, 1 for Low, 0 for unknown
+        """
+        if not risk_text:
+            return 0
+        
+        risk_text_lower = risk_text.lower()
+        
+        # Russian risk levels
+        if 'высокий' in risk_text_lower:
+            return 3
+        elif 'средний' in risk_text_lower:
+            return 2
+        elif 'низкий' in risk_text_lower:
+            return 1
+        
+        # English risk levels (fallback)
+        if 'high' in risk_text_lower:
+            return 3
+        elif 'medium' in risk_text_lower or 'moderate' in risk_text_lower:
+            return 2
+        elif 'low' in risk_text_lower:
+            return 1
+        
+        # If no clear risk level found, default to medium priority
+        return 2
+
+    def _sort_analysis_points_by_risk(self, analysis_points: List[AnalysisPoint]) -> List[AnalysisPoint]:
+        """
+        Sort analysis points by risk level from high to low.
+        
+        Args:
+            analysis_points: List of analysis points to sort
+            
+        Returns:
+            List[AnalysisPoint]: Sorted list with high risk first
+        """
+        return sorted(
+            analysis_points,
+            key=lambda point: self._extract_risk_level(point.risk),
+            reverse=True  # High risk (3) comes first, low risk (1) comes last
+        )
     
     async def analyze_document(self, request: AnalyzeRequest, db: Session, user_id: str) -> AnalyzeResponse:
         """Analyze document for legal risks and recommendations with concurrent processing"""
@@ -95,7 +147,14 @@ class AnalyzerService(RetryMixin):
                     f"No points were analyzed."
                 )
             
-            # Create response with all analyzed points
+            # Sort analysis points within each document point by risk level (high to low)
+            total_sorted_points = 0
+            for analyzed_point in analyzed_points:
+                original_count = len(analyzed_point.analysis_points)
+                analyzed_point.analysis_points = self._sort_analysis_points_by_risk(analyzed_point.analysis_points)
+                total_sorted_points += original_count
+            
+            # Create response with all analyzed points (sorted)
             all_analysis_points = []
             for analyzed_point in analyzed_points:
                 all_analysis_points.extend(analyzed_point.analysis_points)
