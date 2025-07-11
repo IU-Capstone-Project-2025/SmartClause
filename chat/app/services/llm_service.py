@@ -1,31 +1,32 @@
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import logging
-from openai import OpenAI
 import asyncio
 from datetime import datetime
+from openai import AsyncOpenAI
 
-from ..core.config import settings
 from ..models.database import Message, MessageType
+from .retrieval_service import RetrieveResponse
+from ..core.config import settings
 from .retrieval_service import retrieval_service
-from .memory_service import memory_service
 from .document_service import document_service
 
 logger = logging.getLogger(__name__)
 
 
 class LLMService:
-    """Service for generating chat responses using LLM with legal context"""
+    """Service for generating LLM responses with legal context"""
     
     def __init__(self):
-        self.openai_client = None
+        # Initialize OpenAI client if API key is provided
         if settings.openrouter_api_key:
-            self.openai_client = OpenAI(
-                base_url=settings.openrouter_base_url,
+            self.openai_client = AsyncOpenAI(
                 api_key=settings.openrouter_api_key,
+                base_url="https://openrouter.ai/api/v1"
             )
-            logger.info(f"OpenRouter client initialized with model: {settings.llm_model}")
+            logger.info(f"LLM service initialized with model: {settings.llm_model}")
         else:
-            logger.warning("OpenRouter API key not found. LLM responses will use mock responses.")
+            self.openai_client = None
+            logger.warning("OpenRouter API key not provided - using mock responses")
     
     async def generate_response(
         self,
@@ -36,7 +37,7 @@ class LLMService:
         auth_token: str = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        Generate an assistant response to the user message
+        Generate LLM response with legal context
         
         Args:
             user_message: The user's input message
@@ -49,11 +50,10 @@ class LLMService:
             Tuple of (response_text, metadata)
         """
         try:
-            # Get legal and document context for the user's message
-            context = await retrieval_service.get_combined_context(
+            # Get legal rules context for the user's message
+            legal_response = await retrieval_service.retrieve_legal_rules(
                 query=user_message,
-                k_rules=3,
-                k_chunks=3,
+                k=5,
                 auth_token=auth_token
             )
             
@@ -64,8 +64,10 @@ class LLMService:
             # Format conversation history for LLM
             conversation_context = self._format_conversation_history(conversation_history)
             
-            # Format retrieved context for LLM
-            legal_context = retrieval_service.format_context_for_llm(context)
+            # Format retrieved legal rules for LLM
+            legal_context = ""
+            if legal_response:
+                legal_context = retrieval_service.format_rules_for_llm(legal_response)
             
             # Generate response using LLM
             if self.openai_client:
@@ -76,15 +78,14 @@ class LLMService:
                     document_analysis_context=document_analysis_context
                 )
             else:
-                response_text = self._generate_mock_response(user_message, context, space_documents)
+                response_text = self._generate_mock_response(user_message, legal_response, space_documents)
             
             # Prepare metadata
             metadata = {
-                "document_references": self._extract_document_references(context),
+                "document_references": self._extract_document_references(legal_response),
                 "retrieval_context": {
-                    "legal_rules_count": len(context.get("legal_rules", [])),
-                    "document_chunks_count": len(context.get("document_chunks", [])),
-                    "query": context.get("query", "")
+                    "legal_rules_count": len(legal_response.results) if legal_response else 0,
+                    "query": legal_response.query if legal_response else user_message
                 },
                 "document_analysis_context": {
                     "total_documents": space_documents.get("total_documents", 0),
@@ -129,8 +130,7 @@ class LLMService:
             )
             
             # Make API call to OpenRouter with configured model
-            response = await asyncio.to_thread(
-                self.openai_client.chat.completions.create,
+            response = await self.openai_client.chat.completions.create(
                 model=settings.llm_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -225,32 +225,24 @@ Provide clear, actionable, and legally sound advice."""
             logger.error(f"Error formatting conversation history: {e}")
             return ""
     
-    def _extract_document_references(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract document references from retrieval context"""
+    def _extract_document_references(self, legal_response: Optional[RetrieveResponse]) -> List[Dict[str, Any]]:
+        """Extract document references from legal rules response"""
         references = []
         
         try:
+            if not legal_response:
+                return references
+                
             # Extract from legal rules
-            for rule in context.get("legal_rules", []):
-                metadata = rule.get("metadata", {})
+            for rule in legal_response.results:
+                metadata = rule.metadata
                 if metadata.get("file_name"):
                     references.append({
                         "type": "legal_rule",
                         "file_name": metadata.get("file_name"),
                         "rule_title": metadata.get("rule_title"),
                         "rule_number": metadata.get("rule_number"),
-                        "similarity_score": rule.get("similarity_score")
-                    })
-            
-            # Extract from document chunks
-            for chunk in context.get("document_chunks", []):
-                metadata = chunk.get("metadata", {})
-                if metadata.get("file_name"):
-                    references.append({
-                        "type": "document_chunk",
-                        "file_name": metadata.get("file_name"),
-                        "rule_title": metadata.get("rule_title"),
-                        "similarity_score": chunk.get("similarity_score")
+                        "similarity_score": rule.similarity_score
                     })
             
             return references
@@ -259,10 +251,9 @@ Provide clear, actionable, and legally sound advice."""
             logger.error(f"Error extracting document references: {e}")
             return []
     
-    def _generate_mock_response(self, user_message: str, context: Dict[str, Any], space_documents: Dict[str, Any] = None) -> str:
+    def _generate_mock_response(self, user_message: str, legal_response: Optional[RetrieveResponse], space_documents: Dict[str, Any] = None) -> str:
         """Generate a mock response when LLM is not available"""
-        legal_rules_count = len(context.get("legal_rules", []))
-        chunks_count = len(context.get("document_chunks", []))
+        legal_rules_count = len(legal_response.results) if legal_response else 0
         
         # Include document analysis information
         document_info = ""
@@ -273,7 +264,7 @@ Provide clear, actionable, and legally sound advice."""
         
         return f"""Благодарю за ваш вопрос: "{user_message}"
 
-На основе анализа правовой базы данных я нашел {legal_rules_count} релевантных правовых норм и {chunks_count} документальных фрагментов.{document_info}
+На основе анализа правовой базы данных я нашел {legal_rules_count} релевантных правовых норм.{document_info}
 
 [ДЕМО-РЕЖИМ: Настоящий ответ будет сгенерирован после настройки OpenRouter API ключа]
 
