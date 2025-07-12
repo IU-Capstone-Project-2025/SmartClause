@@ -1,6 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
+from sqlalchemy import create_engine, JSON
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql.type_api import TypeEngine
 import io
 import sys
 import os 
@@ -12,49 +16,41 @@ if not api_key:
 else:
     print("Using API key from environment")
 
+def patch_jsonb_for_sqlite():
+    """Simple patch to replace JSONB with JSON for SQLite"""
+    from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
+    
+    # Add visit_JSONB method to SQLite type compiler
+    def visit_JSONB(self, type_, **kw):
+        return self.visit_JSON(type_, **kw)
+    
+    # Monkey patch the method
+    SQLiteTypeCompiler.visit_JSONB = visit_JSONB
+
+patch_jsonb_for_sqlite()
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.main import app
-from app.core.database import get_db
+from app.core.database import get_db, Base
 from app.core.config import settings
 
-# Mock database session
-class MockDB:
-    def __init__(self):
-        pass
-    
-    def query(self, *args, **kwargs):
-        return self
-    
-    def filter(self, *args, **kwargs):
-        return self
-    
-    def order_by(self, *args, **kwargs):
-        return self
-    
-    def limit(self, *args, **kwargs):
-        return self
-    
-    def all(self):
-        return []
-    
-    def first(self):
-        return None
-    
-    def add(self, *args, **kwargs):
-        pass
-    
-    def commit(self):
-        pass
-    
-    def rollback(self):
-        pass
-    
-    def close(self):
-        pass
+SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
+
+engine = create_engine(
+    SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False}
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base.metadata.create_all(bind=engine)
+
 
 def override_get_db():
-    """Override database dependency with mock"""
-    yield MockDB()
+    try:
+        db = TestingSessionLocal()
+        yield db
+    finally:
+        db.close()
+
 
 app.dependency_overrides[get_db] = override_get_db
 
@@ -73,7 +69,7 @@ def test_root_endpoint():
 
 def test_health_endpoint():
     """Test the health check endpoint"""
-    response = client.get("/health")
+    response = client.get("/api/v1/health")
     assert response.status_code == 200
     data = response.json()
     assert "status" in data
