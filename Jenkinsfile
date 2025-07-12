@@ -13,11 +13,12 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.11'
-                            args '-v $HOME/.cache/pip:/root/.cache/pip -v $HOME/.cache/huggingface:/root/.cache/huggingface'
+                            args '-v ${WORKSPACE}/python-cache:/cache -e TRANSFORMERS_CACHE=/cache/huggingface -e HF_HOME=/cache/huggingface -e XDG_CACHE_HOME=/cache'
                         }
                     }
                     steps {
                         dir('analyzer') {
+                            sh 'mkdir -p /cache/huggingface'
                             sh 'python -m venv venv'
                             sh './venv/bin/pip install -r requirements.txt'
                             sh './venv/bin/pytest tests/'
@@ -28,7 +29,7 @@ pipeline {
                     agent {
                         docker {
                             image 'maven:3.9.6-eclipse-temurin-21'
-                            args '-v $HOME/.m2:/root/.m2'
+                            args '-v ${WORKSPACE}/maven-repo:/root/.m2/repository'
                         }
                     }
                     steps {
