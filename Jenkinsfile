@@ -13,7 +13,7 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.11'
-                            args '-v ${WORKSPACE}/python-cache:/cache -e TRANSFORMERS_CACHE=/cache/huggingface -e HF_HOME=/cache/huggingface -e XDG_CACHE_HOME=/cache'
+                            args '-v ${WORKSPACE}/python-cache:/cache -e TRANSFORMERS_CACHE=/cache/huggingface -e HF_HOME=/cache/huggingface -e XDG_CACHE_HOME=/cache -u root'
                         }
                     }
                     steps {
@@ -31,10 +31,13 @@ pipeline {
                     agent {
                         docker {
                             image 'maven:3.9.6-eclipse-temurin-21'
-                            args '-v ${WORKSPACE}/maven-repo:/root/.m2/repository'
+                            args '-v ${WORKSPACE}/maven-repo:/root/.m2/repository -u root'
                         }
                     }
                     steps {
+                        sh 'mkdir -p /root/.m2/repository'
+                        sh 'chmod -R 777 /root/.m2/repository'
+                        
                         dir('backend') {
                             sh 'mvn -Dmaven.repo.local=/root/.m2/repository clean package'
                             sh 'mvn -Dmaven.repo.local=/root/.m2/repository test'
