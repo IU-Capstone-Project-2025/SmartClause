@@ -1,17 +1,29 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, JSON
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy.dialects.postgresql import JSONB
 import io
 import sys
 import os 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Monkey patch JSONB to JSON for SQLite compatibility before importing models
+original_jsonb_init = JSONB.__init__
+
+def patched_jsonb_init(self, *args, **kwargs):
+    # Initialize as JSON instead of JSONB for SQLite compatibility
+    from sqlalchemy import JSON
+    JSON.__init__(self, *args, **kwargs)
+    
+JSONB.__init__ = patched_jsonb_init
+
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.config import settings
 
-# Test database URL (in-memory SQLite for testing)
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
 
 engine = create_engine(
@@ -19,7 +31,7 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create tables
+# Create tables with patched JSONB types
 Base.metadata.create_all(bind=engine)
 
 
@@ -166,4 +178,4 @@ def test_analyze_endpoint_validation():
 
 
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])
