@@ -16,24 +16,33 @@ if not api_key:
 else:
     print("Using API key from environment")
 
+def patch_jsonb_for_sqlite():
+    original_jsonb_get_col_spec = JSONB.get_col_spec
+    
+    def patched_get_col_spec(self, **kwargs):
+        return JSON().get_col_spec(**kwargs)
+    
+    JSONB._original_get_col_spec = original_jsonb_get_col_spec
+    
+    JSONB.get_col_spec = patched_get_col_spec
+    
+    original_compiler_dispatch = JSONB._compiler_dispatch
+    
+    def patched_compiler_dispatch(self, visitor, **kwargs):
+        if hasattr(visitor, 'dialect') and visitor.dialect.name == 'sqlite':
+            return JSON()._compiler_dispatch(visitor, **kwargs)
+        return original_compiler_dispatch(self, visitor, **kwargs)
+    
+    JSONB._compiler_dispatch = patched_compiler_dispatch
+
+patch_jsonb_for_sqlite()
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.config import settings
 
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
-
-def patch_jsonb_for_sqlite():
-    original_impl = TypeEngine.with_variant
-    
-    def patched_with_variant(self, impl, dialect_name):
-        if dialect_name == 'sqlite' and hasattr(self, '_is_jsonb'):
-            return JSON()
-        return original_impl(self, impl, dialect_name)
-    
-    TypeEngine.with_variant = patched_with_variant
-
-patch_jsonb_for_sqlite()
 
 engine = create_engine(
     SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False}
