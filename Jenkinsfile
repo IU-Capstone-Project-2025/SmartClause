@@ -13,7 +13,7 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.11'
-                            args '-v $HOME/.cache/pip:/root/.cache/pip' 
+                            args '-v $HOME/.cache/pip:/root/.cache/pip -v $HOME/.cache/huggingface:/root/.cache/huggingface'
                         }
                     }
                     steps {
@@ -28,6 +28,7 @@ pipeline {
                     agent {
                         docker {
                             image 'maven:3.9.6-eclipse-temurin-21'
+                            args '-v $HOME/.m2:/root/.m2'
                         }
                     }
                     steps {
