@@ -17,23 +17,24 @@ else:
     print("Using API key from environment")
 
 def patch_jsonb_for_sqlite():
-    original_jsonb_get_col_spec = JSONB.get_col_spec
+    original_with_variant = JSONB.with_variant
     
-    def patched_get_col_spec(self, **kwargs):
-        return JSON().get_col_spec(**kwargs)
+    def patched_with_variant(self, impl, dialect_name):
+        if dialect_name == 'sqlite':
+            return JSON()
+        return original_with_variant(self, impl, dialect_name)
     
-    JSONB._original_get_col_spec = original_jsonb_get_col_spec
+    JSONB.with_variant = patched_with_variant
     
-    JSONB.get_col_spec = patched_get_col_spec
+    original_type_engine = JSONB.type_engine
     
-    original_compiler_dispatch = JSONB._compiler_dispatch
+    def patched_type_engine(self, dialect):
+        if dialect.name == 'sqlite':
+            return JSON().type_engine(dialect)
+        return original_type_engine(self, dialect)
     
-    def patched_compiler_dispatch(self, visitor, **kwargs):
-        if hasattr(visitor, 'dialect') and visitor.dialect.name == 'sqlite':
-            return JSON()._compiler_dispatch(visitor, **kwargs)
-        return original_compiler_dispatch(self, visitor, **kwargs)
-    
-    JSONB._compiler_dispatch = patched_compiler_dispatch
+    if hasattr(JSONB, 'type_engine'):
+        JSONB.type_engine = patched_type_engine
 
 patch_jsonb_for_sqlite()
 
