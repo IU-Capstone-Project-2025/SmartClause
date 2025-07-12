@@ -17,8 +17,10 @@ pipeline {
                         }
                     }
                     steps {
+                        sh 'mkdir -p /cache/huggingface'
+                        sh 'chmod -R 777 /cache'
+                        
                         dir('analyzer') {
-                            sh 'mkdir -p /cache/huggingface'
                             sh 'python -m venv venv'
                             sh './venv/bin/pip install -r requirements.txt'
                             sh './venv/bin/pytest tests/'
@@ -34,8 +36,8 @@ pipeline {
                     }
                     steps {
                         dir('backend') {
-                            sh 'mvn clean package'
-                            sh 'mvn test'
+                            sh 'mvn -Dmaven.repo.local=/root/.m2/repository clean package'
+                            sh 'mvn -Dmaven.repo.local=/root/.m2/repository test'
                         }
                     }
                 }
