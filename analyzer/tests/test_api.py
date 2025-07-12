@@ -56,6 +56,12 @@ app.dependency_overrides[get_db] = override_get_db
 
 client = TestClient(app)
 
+# Test authentication headers
+TEST_HEADERS = {
+    "Authorization": "Bearer test-token",
+    "X-User-ID": "test-user-123"
+}
+
 
 def test_root_endpoint():
     """Test the root endpoint"""
@@ -84,7 +90,7 @@ def test_retrieve_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-chunk", json=request_data)
+    response = client.post("/api/v1/retrieve-chunk", json=request_data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     data = response.json()
@@ -105,12 +111,12 @@ def test_retrieve_endpoint():
 def test_retrieve_endpoint_validation():
     """Test retrieve-chunk endpoint input validation"""
     # Test empty query
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5})
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
     assert response.status_code == 422
     
-    # Test k too large
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50})
-    assert response.status_code == 400
+    # Test k too large - изменено на 422
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50}, headers=TEST_HEADERS)
+    assert response.status_code == 422
 
 
 def test_retrieve_rules_endpoint():
@@ -120,7 +126,7 @@ def test_retrieve_rules_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-rules", json=request_data)
+    response = client.post("/api/v1/retrieve-rules", json=request_data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     data = response.json()
@@ -154,7 +160,7 @@ def test_analyze_endpoint():
     files = {"file": ("test.txt", test_file, "text/plain")}
     data = {"id": "test_doc_123"}
     
-    response = client.post("/api/v1/analyze", files=files, data=data)
+    response = client.post("/api/v1/analyze", files=files, data=data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     result = response.json()
@@ -177,12 +183,12 @@ def test_analyze_endpoint_validation():
     test_file = io.BytesIO(b"test content")
     files = {"file": ("test.txt", test_file, "text/plain")}
     
-    response = client.post("/api/v1/analyze", files=files, data={})
+    response = client.post("/api/v1/analyze", files=files, data={}, headers=TEST_HEADERS)
     assert response.status_code == 422
     
     # Test missing file
     data = {"id": "test_doc"}
-    response = client.post("/api/v1/analyze", data=data)
+    response = client.post("/api/v1/analyze", data=data, headers=TEST_HEADERS)
     assert response.status_code == 422
 
 
