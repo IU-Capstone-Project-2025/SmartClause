@@ -6,6 +6,8 @@ import com.capstone.SmartClause.model.AnalysisResponse;
 import com.capstone.SmartClause.model.dto.DocumentDto;
 import com.capstone.SmartClause.repository.DocumentRepository;
 import com.capstone.SmartClause.repository.AnalysisResultRepository;
+import com.capstone.SmartClause.repository.SpaceRepository;
+import com.capstone.SmartClause.model.Space;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +46,9 @@ public class DocumentService {
 
     @Autowired
     private AnalysisService analysisService;
+
+    @Autowired
+    private SpaceRepository spaceRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -110,54 +115,61 @@ public class DocumentService {
         return Optional.of(response);
     }
 
-    public DocumentDto.DocumentUploadResponse uploadDocument(UUID spaceId, MultipartFile file, String name, String userId) throws IOException {
+    public DocumentDto.DocumentUploadResponse uploadDocument(UUID spaceId, MultipartFile file, String userId) throws IOException {
+        return uploadDocument(spaceId, file, userId, null);
+    }
+
+    public DocumentDto.DocumentUploadResponse uploadDocument(UUID spaceId, MultipartFile file, String userId, String authorizationHeader) throws IOException {
         logger.info("Uploading document to space: {} by user: {}", spaceId, userId);
 
-        // Validate file
-        if (file.isEmpty()) {
-            throw new IllegalArgumentException("File cannot be empty");
+        // Validate space exists
+        if (!spaceRepository.existsById(spaceId)) {
+            throw new IllegalArgumentException("Space not found");
         }
 
-        String fileName = name != null ? name : file.getOriginalFilename();
-        
-        // Check for duplicate names in space
-        if (documentRepository.existsByNameAndSpaceId(fileName, spaceId)) {
-            throw new IllegalArgumentException("Document with name '" + fileName + "' already exists in this space");
-        }
-
-        // Create upload directory if it doesn't exist
+        // Create uploads directory if it doesn't exist
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) {
             Files.createDirectories(uploadPath);
         }
 
+        // Generate unique filename
+        String originalFilename = file.getOriginalFilename();
+        String fileExtension = originalFilename != null && originalFilename.contains(".") 
+            ? originalFilename.substring(originalFilename.lastIndexOf(".")) 
+            : "";
+        String uniqueFilename = UUID.randomUUID() + fileExtension;
+        Path filePath = uploadPath.resolve(uniqueFilename);
+
         // Save file to disk
-        String uniqueFileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
-        Path filePath = uploadPath.resolve(uniqueFileName);
         Files.copy(file.getInputStream(), filePath);
 
         // Create document entity
         Document document = new Document();
-        document.setName(fileName);
-        document.setOriginalFilename(file.getOriginalFilename());
+        document.setName(originalFilename != null ? originalFilename : "Unknown");
+        document.setOriginalFilename(originalFilename);
         document.setFilePath(filePath.toString());
         document.setSize(file.getSize());
         document.setContentType(file.getContentType());
         document.setStatus(Document.DocumentStatus.UPLOADING);
         document.setUserId(userId);
         
-        // Store the file content as bytes
+        // Set space relationship
+        Optional<Space> spaceOpt = spaceRepository.findById(spaceId);
+        if (spaceOpt.isPresent()) {
+            document.setSpace(spaceOpt.get());
+        } else {
+            throw new IllegalArgumentException("Space not found");
+        }
+
+        // Read and store file content
         document.setContent(file.getBytes());
         
-        // Set space relationship
-        document.setSpace(new com.capstone.SmartClause.model.Space());
-        document.getSpace().setId(spaceId);
-
         Document savedDocument = documentRepository.save(document);
         logger.info("Uploaded document with ID: {}", savedDocument.getId());
 
-        // Start analysis process asynchronously
-        startDocumentAnalysis(savedDocument);
+        // Start analysis process asynchronously with authorization header
+        startDocumentAnalysis(savedDocument, authorizationHeader);
 
         return convertToDocumentUploadResponse(savedDocument);
     }
@@ -175,7 +187,7 @@ public class DocumentService {
             return Optional.empty();
         }
 
-        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
         return analysisOpt.map(AnalysisResult::getAnalysisPoints);
     }
 
@@ -193,7 +205,7 @@ public class DocumentService {
             return Optional.empty();
         }
 
-        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findByDocumentId(document.getAnalysisDocumentId());
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
         return analysisOpt.map(AnalysisResult::getAnalysisPoints);
     }
 
@@ -243,11 +255,11 @@ public class DocumentService {
         }
     }
 
-    public String reanalyzeDocument(UUID documentId) {
-        return reanalyzeDocument(documentId, null);
+    public String reanalyzeDocument(UUID documentId, String userId) {
+        return reanalyzeDocument(documentId, userId, null);
     }
 
-    public String reanalyzeDocument(UUID documentId, String userId) {
+    public String reanalyzeDocument(UUID documentId, String userId, String authorizationHeader) {
         logger.info("Starting reanalysis for document: {} for user: {}", documentId, userId);
         
         Optional<Document> documentOpt = userId != null 
@@ -271,13 +283,57 @@ public class DocumentService {
         document.setAnalysisDocumentId(newAnalysisDocumentId);
         documentRepository.save(document);
 
-        // Start new analysis
-        analyzeDocumentAsync(document, newAnalysisDocumentId);
+        // Start new analysis with authorization header
+        analyzeDocumentAsync(document, newAnalysisDocumentId, authorizationHeader);
         
         return newAnalysisDocumentId;
     }
 
+    public byte[] exportDocumentAnalysisPdf(UUID documentId, String userId) {
+        return exportDocumentAnalysisPdf(documentId, userId, null);
+    }
+
+    public byte[] exportDocumentAnalysisPdf(UUID documentId, String userId, String authorizationHeader) {
+        logger.info("Exporting analysis PDF for document: {} and user: {}", documentId, userId);
+        
+        // First verify the document belongs to the user
+        Optional<Document> documentOpt = userId != null 
+            ? documentRepository.findByIdAndUserId(documentId, userId)
+            : documentRepository.findById(documentId);
+            
+        if (documentOpt.isEmpty()) {
+            throw new IllegalArgumentException("Document not found");
+        }
+
+        Document document = documentOpt.get();
+        
+        // Check if document has analysis results
+        if (document.getAnalysisDocumentId() == null) {
+            throw new IllegalArgumentException("No analysis found for this document");
+        }
+        
+        // Verify analysis exists in database
+        Optional<AnalysisResult> analysisOpt = analysisResultRepository.findLatestByDocumentId(document.getAnalysisDocumentId());
+        if (analysisOpt.isEmpty()) {
+            throw new IllegalArgumentException("Analysis not found for this document");
+        }
+
+        try {
+            // Call analyzer service to export PDF with authorization header
+            byte[] pdfBytes = analysisService.exportAnalysisPdf(document.getAnalysisDocumentId(), authorizationHeader);
+            logger.info("PDF export completed for document: {}", documentId);
+            return pdfBytes;
+        } catch (Exception e) {
+            logger.error("Failed to export PDF for document: {}", documentId, e);
+            throw new RuntimeException("Failed to export analysis PDF: " + e.getMessage(), e);
+        }
+    }
+
     private void startDocumentAnalysis(Document document) {
+        startDocumentAnalysis(document, null);
+    }
+
+    private void startDocumentAnalysis(Document document, String authorizationHeader) {
         try {
             // Update status to processing
             document.setStatus(Document.DocumentStatus.PROCESSING);
@@ -289,7 +345,7 @@ public class DocumentService {
             documentRepository.save(document);
 
             // Call analyzer microservice asynchronously
-            analyzeDocumentAsync(document, analysisDocumentId);
+            analyzeDocumentAsync(document, analysisDocumentId, authorizationHeader);
 
         } catch (Exception e) {
             logger.error("Failed to start analysis for document: {}", document.getId(), e);
@@ -300,6 +356,11 @@ public class DocumentService {
 
     @Async
     public void analyzeDocumentAsync(Document document, String analysisDocumentId) {
+        analyzeDocumentAsync(document, analysisDocumentId, null);
+    }
+
+    @Async
+    public void analyzeDocumentAsync(Document document, String analysisDocumentId, String authorizationHeader) {
         try {
             logger.info("Starting async analysis for document: {} with analysis ID: {}", document.getId(), analysisDocumentId);
 
@@ -314,7 +375,7 @@ public class DocumentService {
             );
 
             // Call the analyzer microservice
-            AnalysisResponse analysisResponse = analysisService.analyzeDocument(analysisDocumentId, multipartFile);
+            AnalysisResponse analysisResponse = analysisService.analyzeDocument(analysisDocumentId, multipartFile, authorizationHeader);
             
             if (analysisResponse != null) {
                 logger.info("Analysis completed successfully for document: {}", document.getId());

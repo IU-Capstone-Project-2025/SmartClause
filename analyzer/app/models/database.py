@@ -60,5 +60,6 @@ class AnalysisResult(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(String(255), index=True)
+    user_id = Column(String(255), index=True)  # Associate analysis with user
     analysis_points = Column(JSONB)
     created_at = Column(TIMESTAMP, server_default=func.now()) 

@@ -7,7 +7,7 @@ class RetrieveRequest(BaseModel):
     query: str = Field(..., description="Search query for document retrieval", min_length=1)
     k: int = Field(default=5, description="Number of documents to retrieve", ge=1, le=20)
     distance_function: Optional[str] = Field(
-        default="cosine", 
+        default="l2", 
         description="Distance function to use: 'cosine', 'l2', or 'inner_product'"
     )
     

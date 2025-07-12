@@ -1,7 +1,9 @@
 package com.capstone.SmartClause.controller;
 
 import com.capstone.SmartClause.model.AnalysisResponse;
+import com.capstone.SmartClause.model.dto.ChatDto;
 import com.capstone.SmartClause.service.AnalysisService;
+import com.capstone.SmartClause.service.ChatService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,7 +35,11 @@ public class Controller {
     @Autowired
     private AnalysisService analysisService;
 
-    @Operation(summary = "Upload and analyze a document", description = "Uploads a document file and returns analysis results")
+    @Autowired
+    private ChatService chatService;
+
+    @Operation(summary = "Upload and analyze a document", 
+              description = "Uploads a document file and returns analysis results. Works both with and without authentication for public demo access.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Document analyzed successfully",
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = AnalysisResponse.class))),
@@ -41,11 +48,22 @@ public class Controller {
     })
     @PostMapping("/get_analysis")
     public ResponseEntity<?> uploadDocumentFile(
+            @Parameter(description = "Authorization header (optional for public demo access)") 
+            @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(description = "Document identifier") @RequestParam("id") String id,
             @Parameter(description = "Document file") @RequestParam("bytes") MultipartFile file) {
         
         try {
-            AnalysisResponse response = analysisService.analyzeDocument(id, file);
+            // Public Access Design: This endpoint supports both authenticated and anonymous users.
+            // For authenticated users, we pass the valid Bearer token to downstream services.
+            // For anonymous users (landing page/demo), we pass null so AnalysisService can generate a system token.
+            String authForService = null;
+            if (authorization != null && authorization.trim().startsWith("Bearer ") && authorization.trim().length() > 7) {
+                authForService = authorization;
+            }
+            // If authForService is null, AnalysisService will generate a system token for internal communication
+            
+            AnalysisResponse response = analysisService.analyzeDocument(id, file, authForService);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -53,17 +71,40 @@ public class Controller {
         }
     }
     
-    @Operation(summary = "Check service health", description = "Returns the health status of the service")
+    @Operation(summary = "Check service health", description = "Returns the health status of the service and connected microservices")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Service is healthy",
                 content = @Content(mediaType = "application/json"))
     })
     @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> healthCheck() {
-        return ResponseEntity.ok(Map.of(
-            "status", "UP",
-            "service", "SmartClause API",
-            "timestamp", java.time.Instant.now().toString()
-        ));
+    public ResponseEntity<Map<String, Object>> healthCheck() {
+        try {
+            // Check chat service health
+            ChatDto.ChatHealthResponse chatHealth = chatService.checkChatHealth();
+            boolean chatHealthy = "healthy".equals(chatHealth.getStatus()) || "degraded".equals(chatHealth.getStatus());
+            
+            String overallStatus = chatHealthy ? "UP" : "DEGRADED";
+            
+            return ResponseEntity.ok(Map.of(
+                "status", overallStatus,
+                "service", "SmartClause API",
+                "timestamp", java.time.Instant.now().toString(),
+                "chat_service", Map.of(
+                    "status", chatHealth.getStatus(),
+                    "database_connected", chatHealth.isDatabaseConnected(),
+                    "analyzer_connected", chatHealth.isAnalyzerConnected()
+                )
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                "status", "DEGRADED",
+                "service", "SmartClause API",
+                "timestamp", java.time.Instant.now().toString(),
+                "chat_service", Map.of(
+                    "status", "unreachable",
+                    "error", "Chat service is not available"
+                )
+            ));
+        }
     }
 }
