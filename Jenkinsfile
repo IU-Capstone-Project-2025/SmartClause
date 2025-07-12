@@ -27,7 +27,7 @@ pipeline {
                 stage('Java Service') {
                     agent {
                         docker {
-                            image 'maven:3.9.6-eclipse-temurin-17'
+                            image 'maven:3.9.6-eclipse-temurin-21'
                         }
                     }
                     steps {
