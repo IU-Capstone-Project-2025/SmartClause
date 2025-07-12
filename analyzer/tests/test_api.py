@@ -4,34 +4,42 @@ from sqlalchemy import create_engine, JSON
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql.type_api import TypeEngine
 import io
 import sys
 import os 
 
+api_key = os.getenv('OPENROUTER_API_KEY')
+if not api_key:
+    os.environ['OPENROUTER_API_KEY'] = 'test-dummy-key-for-testing'
+    print("Using dummy API key for testing")
+else:
+    print("Using API key from environment")
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Monkey patch JSONB to JSON for SQLite compatibility before importing models
-original_jsonb_init = JSONB.__init__
-
-def patched_jsonb_init(self, *args, **kwargs):
-    # Initialize as JSON instead of JSONB for SQLite compatibility
-    from sqlalchemy import JSON
-    JSON.__init__(self, *args, **kwargs)
-    
-JSONB.__init__ = patched_jsonb_init
-
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.config import settings
 
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
 
+def patch_jsonb_for_sqlite():
+    original_impl = TypeEngine.with_variant
+    
+    def patched_with_variant(self, impl, dialect_name):
+        if dialect_name == 'sqlite' and hasattr(self, '_is_jsonb'):
+            return JSON()
+        return original_impl(self, impl, dialect_name)
+    
+    TypeEngine.with_variant = patched_with_variant
+
+patch_jsonb_for_sqlite()
+
 engine = create_engine(
     SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create tables with patched JSONB types
 Base.metadata.create_all(bind=engine)
 
 

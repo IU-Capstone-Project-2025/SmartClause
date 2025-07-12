@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        OPENROUTER_API_KEY = credentials('OPENROUTER_API_KEY')
+    }
+
     stages {
         stage('Checkout') {
             steps {
