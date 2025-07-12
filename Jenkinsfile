@@ -37,30 +37,6 @@ pipeline {
                         }
                     }
                 }
-                stage('Frontend') {
-                    steps {
-                        sleep(time: 10, unit: 'SECONDS')
-                        retry(5) {
-                            script {
-                                try {
-                                    def statusCode = sh(
-                                        script: 'curl -s -o /dev/null -w "%{http_code}" http://158.160.190.57:8080',
-                                        returnStdout: true
-                                    ).trim()
-                                    
-                                    if (statusCode == "200") {
-                                        echo "Frontend successfully started and responds with code: ${statusCode}"
-                                    } else {
-                                        error "Frontend responded with incorrect status code: ${statusCode}"
-                                    }
-                                } catch (Exception e) {
-                                    error "Failed to connect to frontend: ${e.message}"
-                                }
-                            }
-                            sleep(time: 5, unit: 'SECONDS')
-                        }
-                    }
-                }
             }
         }
         stage('Deploy') {
