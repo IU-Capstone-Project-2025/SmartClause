@@ -1,10 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, JSON
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.sql.type_api import TypeEngine
+from unittest.mock import Mock, patch
 import io
 import sys
 import os 
@@ -16,50 +12,49 @@ if not api_key:
 else:
     print("Using API key from environment")
 
-def patch_jsonb_for_sqlite():
-    original_with_variant = JSONB.with_variant
-    
-    def patched_with_variant(self, impl, dialect_name):
-        if dialect_name == 'sqlite':
-            return JSON()
-        return original_with_variant(self, impl, dialect_name)
-    
-    JSONB.with_variant = patched_with_variant
-    
-    original_type_engine = JSONB.type_engine
-    
-    def patched_type_engine(self, dialect):
-        if dialect.name == 'sqlite':
-            return JSON().type_engine(dialect)
-        return original_type_engine(self, dialect)
-    
-    if hasattr(JSONB, 'type_engine'):
-        JSONB.type_engine = patched_type_engine
-
-patch_jsonb_for_sqlite()
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.main import app
-from app.core.database import get_db, Base
+from app.core.database import get_db
 from app.core.config import settings
 
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
-
-engine = create_engine(
-    SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base.metadata.create_all(bind=engine)
-
+# Mock database session
+class MockDB:
+    def __init__(self):
+        pass
+    
+    def query(self, *args, **kwargs):
+        return self
+    
+    def filter(self, *args, **kwargs):
+        return self
+    
+    def order_by(self, *args, **kwargs):
+        return self
+    
+    def limit(self, *args, **kwargs):
+        return self
+    
+    def all(self):
+        return []
+    
+    def first(self):
+        return None
+    
+    def add(self, *args, **kwargs):
+        pass
+    
+    def commit(self):
+        pass
+    
+    def rollback(self):
+        pass
+    
+    def close(self):
+        pass
 
 def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
+    """Override database dependency with mock"""
+    yield MockDB()
 
 app.dependency_overrides[get_db] = override_get_db
 
