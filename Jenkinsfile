@@ -52,16 +52,20 @@ pipeline {
         }
         stage('Deploy') {
             steps {
+                echo "Starting deployment stage on Jenkins side"
                 sshagent(['deploy-key-id']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
+                            echo "=== Starting deployment ===" &&
                             cd SmartClause &&
                             git pull &&
                             docker compose down &&
-                            docker compose up -d --build
+                            docker compose up -d --build &&
+                            echo "=== Deploy completed successfully ==="
                         '
                     '''
                 }
+                echo "Deploy stage finished successfully on Jenkins side"
             }
         }
     }
