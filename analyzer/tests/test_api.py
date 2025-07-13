@@ -96,11 +96,11 @@ def test_health_endpoint():
     assert "database_connected" in data
 
 
-# Мокаем конкретные модули где используются HTTP-клиенты
-@patch('app.utils.auth_utils.requests.post')
-@patch('app.utils.auth_utils.requests.get')
-@patch('app.utils.auth_utils.httpx.post')
-@patch('app.utils.auth_utils.httpx.get')
+# Мокаем глобальные модули requests и httpx
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
 def test_retrieve_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-chunk endpoint with mock data"""
     
@@ -133,10 +133,10 @@ def test_retrieve_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, m
         assert isinstance(result["embedding"], list)
 
 
-@patch('app.utils.auth_utils.requests.post')
-@patch('app.utils.auth_utils.requests.get')
-@patch('app.utils.auth_utils.httpx.post')
-@patch('app.utils.auth_utils.httpx.get')
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
 def test_retrieve_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test retrieve-chunk endpoint input validation"""
     
@@ -155,10 +155,10 @@ def test_retrieve_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requ
     assert response.status_code == 422
 
 
-@patch('app.utils.auth_utils.requests.post')
-@patch('app.utils.auth_utils.requests.get')
-@patch('app.utils.auth_utils.httpx.post')
-@patch('app.utils.auth_utils.httpx.get')
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
 def test_retrieve_rules_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-rules endpoint with mock data"""
     
@@ -198,10 +198,10 @@ def test_retrieve_rules_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_
         assert "file_name" in metadata
 
 
-@patch('app.utils.auth_utils.requests.post')
-@patch('app.utils.auth_utils.requests.get')
-@patch('app.utils.auth_utils.httpx.post')
-@patch('app.utils.auth_utils.httpx.get')
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
 def test_analyze_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the analyze endpoint with mock document"""
     
@@ -235,10 +235,10 @@ def test_analyze_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mo
         assert "recommendation" in point
 
 
-@patch('app.utils.auth_utils.requests.post')
-@patch('app.utils.auth_utils.requests.get')
-@patch('app.utils.auth_utils.httpx.post')
-@patch('app.utils.auth_utils.httpx.get')
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
 def test_analyze_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test analyze endpoint input validation"""
     
