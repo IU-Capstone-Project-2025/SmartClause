@@ -55,7 +55,7 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
-def setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
+def setup_successful_auth_mocks():
     """Настройка успешной авторизации для всех HTTP-клиентов"""
     mock_auth_response = MagicMock()
     mock_auth_response.status_code = 200
@@ -64,11 +64,7 @@ def setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_g
         "username": "test-user",
         "valid": True
     }
-    
-    mock_requests_post.return_value = mock_auth_response
-    mock_requests_get.return_value = mock_auth_response
-    mock_httpx_post.return_value = mock_auth_response
-    mock_httpx_get.return_value = mock_auth_response
+    return mock_auth_response
 
 client = TestClient(app)
 
@@ -100,14 +96,19 @@ def test_health_endpoint():
     assert "database_connected" in data
 
 
-@patch('requests.post')
-@patch('requests.get')
-@patch('httpx.post')
-@patch('httpx.get')
+# Мокаем конкретные модули где используются HTTP-клиенты
+@patch('app.utils.auth_utils.requests.post')
+@patch('app.utils.auth_utils.requests.get')
+@patch('app.utils.auth_utils.httpx.post')
+@patch('app.utils.auth_utils.httpx.get')
 def test_retrieve_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-chunk endpoint with mock data"""
     
-    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    mock_response = setup_successful_auth_mocks()
+    mock_requests_post.return_value = mock_response
+    mock_requests_get.return_value = mock_response
+    mock_httpx_post.return_value = mock_response
+    mock_httpx_get.return_value = mock_response
     
     request_data = {
         "query": "contract termination",
@@ -132,14 +133,18 @@ def test_retrieve_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, m
         assert isinstance(result["embedding"], list)
 
 
-@patch('requests.post')
-@patch('requests.get')
-@patch('httpx.post')
-@patch('httpx.get')
+@patch('app.utils.auth_utils.requests.post')
+@patch('app.utils.auth_utils.requests.get')
+@patch('app.utils.auth_utils.httpx.post')
+@patch('app.utils.auth_utils.httpx.get')
 def test_retrieve_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test retrieve-chunk endpoint input validation"""
     
-    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    mock_response = setup_successful_auth_mocks()
+    mock_requests_post.return_value = mock_response
+    mock_requests_get.return_value = mock_response
+    mock_httpx_post.return_value = mock_response
+    mock_httpx_get.return_value = mock_response
     
     # Test empty query
     response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
@@ -150,14 +155,18 @@ def test_retrieve_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requ
     assert response.status_code == 422
 
 
-@patch('requests.post')
-@patch('requests.get')
-@patch('httpx.post')
-@patch('httpx.get')
+@patch('app.utils.auth_utils.requests.post')
+@patch('app.utils.auth_utils.requests.get')
+@patch('app.utils.auth_utils.httpx.post')
+@patch('app.utils.auth_utils.httpx.get')
 def test_retrieve_rules_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-rules endpoint with mock data"""
     
-    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    mock_response = setup_successful_auth_mocks()
+    mock_requests_post.return_value = mock_response
+    mock_requests_get.return_value = mock_response
+    mock_httpx_post.return_value = mock_response
+    mock_httpx_get.return_value = mock_response
     
     request_data = {
         "query": "contract termination",
@@ -189,14 +198,18 @@ def test_retrieve_rules_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_
         assert "file_name" in metadata
 
 
-@patch('requests.post')
-@patch('requests.get')
-@patch('httpx.post')
-@patch('httpx.get')
+@patch('app.utils.auth_utils.requests.post')
+@patch('app.utils.auth_utils.requests.get')
+@patch('app.utils.auth_utils.httpx.post')
+@patch('app.utils.auth_utils.httpx.get')
 def test_analyze_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the analyze endpoint with mock document"""
     
-    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    mock_response = setup_successful_auth_mocks()
+    mock_requests_post.return_value = mock_response
+    mock_requests_get.return_value = mock_response
+    mock_httpx_post.return_value = mock_response
+    mock_httpx_get.return_value = mock_response
     
     # Create a test document
     test_content = "This is a test contract with termination clauses."
@@ -222,14 +235,18 @@ def test_analyze_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mo
         assert "recommendation" in point
 
 
-@patch('requests.post')
-@patch('requests.get')
-@patch('httpx.post')
-@patch('httpx.get')
+@patch('app.utils.auth_utils.requests.post')
+@patch('app.utils.auth_utils.requests.get')
+@patch('app.utils.auth_utils.httpx.post')
+@patch('app.utils.auth_utils.httpx.get')
 def test_analyze_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test analyze endpoint input validation"""
     
-    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    mock_response = setup_successful_auth_mocks()
+    mock_requests_post.return_value = mock_response
+    mock_requests_get.return_value = mock_response
+    mock_httpx_post.return_value = mock_response
+    mock_httpx_get.return_value = mock_response
     
     # Test missing ID
     test_file = io.BytesIO(b"test content")
