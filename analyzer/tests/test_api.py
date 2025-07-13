@@ -59,7 +59,7 @@ def mock_get_current_user():
 
 app.dependency_overrides[get_db] = override_get_db
 
-# Try to override authentication dependencies
+# Try to override all possible authentication dependencies
 try:
     from app.utils.auth_utils import get_current_user
     app.dependency_overrides[get_current_user] = mock_get_current_user
@@ -72,14 +72,40 @@ try:
 except ImportError:
     pass
 
-# Try to override any authentication middleware
 try:
     from app.utils.auth_utils import authenticate_user
     app.dependency_overrides[authenticate_user] = mock_get_current_user
 except ImportError:
     pass
 
+try:
+    from app.auth import get_current_user
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+except ImportError:
+    pass
+
+try:
+    from app.auth import authenticate_user
+    app.dependency_overrides[authenticate_user] = mock_get_current_user
+except ImportError:
+    pass
+
+# Try to patch the auth_utils module directly
+try:
+    import app.utils.auth_utils as auth_utils
+    auth_utils.authenticate_user = lambda *args, **kwargs: mock_get_current_user()
+    auth_utils.get_current_user = lambda *args, **kwargs: mock_get_current_user()
+except ImportError:
+    pass
+
 client = TestClient(app)
+
+# Test headers with authentication
+TEST_HEADERS = {
+    "Authorization": "Bearer test-token",
+    "X-User-ID": "test-user-123",
+    "X-API-Key": "test-api-key"
+}
 
 
 def test_root_endpoint():
@@ -109,7 +135,7 @@ def test_retrieve_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-chunk", json=request_data)
+    response = client.post("/api/v1/retrieve-chunk", json=request_data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     data = response.json()
@@ -130,11 +156,11 @@ def test_retrieve_endpoint():
 def test_retrieve_endpoint_validation():
     """Test retrieve-chunk endpoint input validation"""
     # Test empty query
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5})
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
     assert response.status_code == 422
     
     # Test k too large
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50})
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50}, headers=TEST_HEADERS)
     assert response.status_code == 422
 
 
@@ -145,7 +171,7 @@ def test_retrieve_rules_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-rules", json=request_data)
+    response = client.post("/api/v1/retrieve-rules", json=request_data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     data = response.json()
@@ -179,7 +205,7 @@ def test_analyze_endpoint():
     files = {"file": ("test.txt", test_file, "text/plain")}
     data = {"id": "test_doc_123"}
     
-    response = client.post("/api/v1/analyze", files=files, data=data)
+    response = client.post("/api/v1/analyze", files=files, data=data, headers=TEST_HEADERS)
     assert response.status_code == 200
     
     result = response.json()
@@ -202,12 +228,12 @@ def test_analyze_endpoint_validation():
     test_file = io.BytesIO(b"test content")
     files = {"file": ("test.txt", test_file, "text/plain")}
     
-    response = client.post("/api/v1/analyze", files=files, data={})
+    response = client.post("/api/v1/analyze", files=files, data={}, headers=TEST_HEADERS)
     assert response.status_code == 422
     
     # Test missing file
     data = {"id": "test_doc"}
-    response = client.post("/api/v1/analyze", data=data)
+    response = client.post("/api/v1/analyze", data=data, headers=TEST_HEADERS)
     assert response.status_code == 422
 
 
