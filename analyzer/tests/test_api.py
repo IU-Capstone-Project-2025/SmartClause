@@ -52,15 +52,34 @@ def override_get_db():
         db.close()
 
 
+# Mock authentication function
+def mock_get_current_user():
+    return {"user_id": "test-user-123", "username": "test-user"}
+
+
 app.dependency_overrides[get_db] = override_get_db
 
-client = TestClient(app)
+# Try to override authentication dependencies
+try:
+    from app.utils.auth_utils import get_current_user
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+except ImportError:
+    pass
 
-# Test authentication headers
-TEST_HEADERS = {
-    "Authorization": "Bearer test-token",
-    "X-User-ID": "test-user-123"
-}
+try:
+    from app.dependencies import get_current_user
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+except ImportError:
+    pass
+
+# Try to override any authentication middleware
+try:
+    from app.utils.auth_utils import authenticate_user
+    app.dependency_overrides[authenticate_user] = mock_get_current_user
+except ImportError:
+    pass
+
+client = TestClient(app)
 
 
 def test_root_endpoint():
@@ -90,7 +109,7 @@ def test_retrieve_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-chunk", json=request_data, headers=TEST_HEADERS)
+    response = client.post("/api/v1/retrieve-chunk", json=request_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -111,11 +130,11 @@ def test_retrieve_endpoint():
 def test_retrieve_endpoint_validation():
     """Test retrieve-chunk endpoint input validation"""
     # Test empty query
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5})
     assert response.status_code == 422
     
-    # Test k too large - изменено на 422
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50}, headers=TEST_HEADERS)
+    # Test k too large
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50})
     assert response.status_code == 422
 
 
@@ -126,7 +145,7 @@ def test_retrieve_rules_endpoint():
         "k": 3
     }
     
-    response = client.post("/api/v1/retrieve-rules", json=request_data, headers=TEST_HEADERS)
+    response = client.post("/api/v1/retrieve-rules", json=request_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -160,7 +179,7 @@ def test_analyze_endpoint():
     files = {"file": ("test.txt", test_file, "text/plain")}
     data = {"id": "test_doc_123"}
     
-    response = client.post("/api/v1/analyze", files=files, data=data, headers=TEST_HEADERS)
+    response = client.post("/api/v1/analyze", files=files, data=data)
     assert response.status_code == 200
     
     result = response.json()
@@ -183,12 +202,12 @@ def test_analyze_endpoint_validation():
     test_file = io.BytesIO(b"test content")
     files = {"file": ("test.txt", test_file, "text/plain")}
     
-    response = client.post("/api/v1/analyze", files=files, data={}, headers=TEST_HEADERS)
+    response = client.post("/api/v1/analyze", files=files, data={})
     assert response.status_code == 422
     
     # Test missing file
     data = {"id": "test_doc"}
-    response = client.post("/api/v1/analyze", data=data, headers=TEST_HEADERS)
+    response = client.post("/api/v1/analyze", data=data)
     assert response.status_code == 422
 
 
