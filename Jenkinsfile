@@ -54,7 +54,7 @@ pipeline {
             steps {
                 sshagent(['deploy-key-id']) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no user@host '
+                        ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
                             cd SmartClause &&
                             git pull &&
                             docker compose down &&
@@ -63,7 +63,7 @@ pipeline {
                     '''
                 }
             }
-        }   
+        }
     }
 
     post {
