@@ -87,52 +87,16 @@ def connect_to_database(config):
         return None
 
 def find_dataset_files(script_dir):
-    """Find and validate dataset files in the script directory and datasets subdirectory."""
+    """Only use rules_dataset.csv and chunks_dataset.csv in datasets directory."""
+    datasets_dir = script_dir.parent.parent / "datasets"
     files = {}
-    local_datasets_dir = script_dir / "datasets"
-    
-    # Also check project root datasets directory (for Docker mounting)
-    project_root = script_dir.parent.parent
-    root_datasets_dir = project_root / "datasets"
-    
-    # Look for rules dataset
-    rules_candidates = [
-        root_datasets_dir / "rules_dataset.csv",
-        root_datasets_dir / "dataset_codes_rf.csv",
-        local_datasets_dir / "rules_dataset.csv",
-        local_datasets_dir / "dataset_codes_rf.csv",
-        script_dir / "rules_dataset.csv",
-        script_dir / "dataset_codes_rf.csv"
-    ]
-    
-    for candidate in rules_candidates:
-        if candidate.exists():
-            files['rules'] = candidate
-            break
-    
-    # Look for chunks dataset  
-    chunks_candidates = [
-        root_datasets_dir / "chunks_dataset.csv",
-        root_datasets_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv",
-        local_datasets_dir / "chunks_dataset.csv",
-        local_datasets_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv",
-        script_dir / "chunks_dataset.csv",
-        script_dir / "dataset_codes_rf_chunking_800chunksize_500overlap.csv"
-    ]
-    
-    for candidate in chunks_candidates:
-        if candidate.exists():
-            files['chunks'] = candidate
-            break
-    
-    # Set output file for embeddings (prefer project root datasets directory)
-    if root_datasets_dir.exists():
-        files['embeddings_output'] = root_datasets_dir / "chunks_with_embeddings.csv"
-    elif local_datasets_dir.exists():
-        files['embeddings_output'] = local_datasets_dir / "chunks_with_embeddings.csv"
-    else:
-        files['embeddings_output'] = script_dir / "chunks_with_embeddings.csv"
-    
+    rules_file = datasets_dir / "rules_dataset.csv"
+    chunks_file = datasets_dir / "chunks_dataset.csv"
+    if rules_file.exists():
+        files['rules'] = rules_file
+    if chunks_file.exists():
+        files['chunks'] = chunks_file
+    files['embeddings_output'] = datasets_dir / "chunks_with_embeddings.csv"
     return files
 
 def validate_dataset_files(files):
@@ -140,10 +104,10 @@ def validate_dataset_files(files):
     missing = []
     
     if 'rules' not in files or not files['rules'].exists():
-        missing.append("rules dataset (datasets/rules_dataset.csv or datasets/dataset_codes_rf.csv)")
+        missing.append("rules dataset (datasets/rules_dataset.csv)")
     
     if 'chunks' not in files or not files['chunks'].exists():
-        missing.append("chunks dataset (datasets/chunks_dataset.csv or datasets/dataset_codes_rf_chunking_800chunksize_500overlap.csv)")
+        missing.append("chunks dataset (datasets/chunks_dataset.csv)")
     
     if missing:
         print(f"❌ Missing required files: {', '.join(missing)}")
@@ -202,17 +166,17 @@ def load_datasets(files):
         print(f"❌ Error loading datasets: {e}")
         return None, None
 
-def generate_embeddings(chunks_df, embeddings_file):
-    """Generate embeddings for chunks using the embedding service."""
+def generate_embeddings(chunks_df, embeddings_file=None):
+    """Generate embeddings for chunks using the embedding service. Always save to datasets/chunks_with_embeddings.csv."""
     print(f"\n🤖 Generating embeddings...")
-    
+    from pathlib import Path
+    datasets_dir = Path(__file__).parent.parent / "datasets"
+    embeddings_file = datasets_dir / "chunks_with_embeddings.csv"
     try:
         # Import embedding service
         from app.services.embedding_service import embedding_service
-        
         embeddings = []
         failed_count = 0
-        
         print(f"Processing {len(chunks_df)} chunks...")
         for idx, row in tqdm(chunks_df.iterrows(), total=len(chunks_df), desc="Generating embeddings"):
             try:
@@ -221,30 +185,23 @@ def generate_embeddings(chunks_df, embeddings_file):
                     embeddings.append(None)
                     failed_count += 1
                     continue
-                
                 # Generate embedding
                 embedding = embedding_service.encode_to_list(chunk_text)
                 embeddings.append(json.dumps(embedding))
-                
             except Exception as e:
                 print(f"Error generating embedding for chunk {idx}: {e}")
                 embeddings.append(None)
                 failed_count += 1
-        
         # Add embeddings to dataframe
         chunks_with_embeddings = chunks_df.copy()
         chunks_with_embeddings['embedding'] = embeddings
-        
         # Save to file
         print(f"💾 Saving chunks with embeddings to {embeddings_file}...")
         chunks_with_embeddings.to_csv(embeddings_file, index=False)
-        
         print(f"✓ Generated embeddings for {len(embeddings) - failed_count}/{len(chunks_df)} chunks")
         if failed_count > 0:
             print(f"⚠ Failed to generate {failed_count} embeddings")
-        
         return chunks_with_embeddings
-        
     except ImportError as e:
         print(f"❌ Error importing embedding service: {e}")
         print("Make sure you're running from the analyzer directory")
@@ -659,7 +616,7 @@ Examples:
         # Handle embeddings
         if args.generate:
             # Generate new embeddings
-            chunks_with_embeddings = generate_embeddings(chunks_df, files['embeddings_output'])
+            chunks_with_embeddings = generate_embeddings(chunks_df)
             if chunks_with_embeddings is None:
                 return 1
         elif args.upload:
