@@ -79,11 +79,11 @@ def test_health_endpoint():
 def test_retrieve_endpoint_validation():
     """Test retrieve-chunk endpoint input validation"""
     # Test empty query
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5})
     assert response.status_code == 422
     
     # Test k too large - изменено на 422
-    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50}, headers=TEST_HEADERS)
+    response = client.post("/api/v1/retrieve-chunk", json={"query": "test", "k": 50})
     assert response.status_code == 422
 
 
@@ -94,12 +94,12 @@ def test_analyze_endpoint_validation():
     test_file = io.BytesIO(b"test content")
     files = {"file": ("test.txt", test_file, "text/plain")}
     
-    response = client.post("/api/v1/analyze", files=files, data={}, headers=TEST_HEADERS)
+    response = client.post("/api/v1/analyze", files=files, data={})
     assert response.status_code == 422
     
     # Test missing file
     data = {"id": "test_doc"}
-    response = client.post("/api/v1/analyze", data=data, headers=TEST_HEADERS)
+    response = client.post("/api/v1/analyze", data=data)
     assert response.status_code == 422
 
 
