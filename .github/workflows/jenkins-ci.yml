@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Jenkins Job
-        uses: joshlk/jenkins-githubaction@v1
+        uses: jabbukka/jenkins-trigger@main
         with:
           url: 'http://158.160.190.57:9090/'
           job_name: 'Pipeline'
