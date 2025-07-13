@@ -52,10 +52,18 @@ pipeline {
         }
         stage('Deploy') {
             steps {
-                sh 'docker compose down'
-                sh 'docker compose up -d --build'
+                sshagent(['deploy-key-id']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no user@host '
+                            cd SmartClause &&
+                            git pull &&
+                            docker compose down &&
+                            docker compose up -d --build
+                        '
+                    '''
+                }
             }
-        }
+        }   
     }
 
     post {
