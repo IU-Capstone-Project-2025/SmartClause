@@ -8,6 +8,7 @@ from sqlalchemy.sql.type_api import TypeEngine
 import io
 import sys
 import os 
+from unittest.mock import patch, MagicMock
 
 api_key = os.getenv('OPENROUTER_API_KEY')
 if not api_key:
@@ -52,51 +53,22 @@ def override_get_db():
         db.close()
 
 
-# Mock authentication function
-def mock_get_current_user():
-    return {"user_id": "test-user-123", "username": "test-user"}
-
-
 app.dependency_overrides[get_db] = override_get_db
 
-# Try to override all possible authentication dependencies
-try:
-    from app.utils.auth_utils import get_current_user
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-except ImportError:
-    pass
-
-try:
-    from app.dependencies import get_current_user
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-except ImportError:
-    pass
-
-try:
-    from app.utils.auth_utils import authenticate_user
-    app.dependency_overrides[authenticate_user] = mock_get_current_user
-except ImportError:
-    pass
-
-try:
-    from app.auth import get_current_user
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-except ImportError:
-    pass
-
-try:
-    from app.auth import authenticate_user
-    app.dependency_overrides[authenticate_user] = mock_get_current_user
-except ImportError:
-    pass
-
-# Try to patch the auth_utils module directly
-try:
-    import app.utils.auth_utils as auth_utils
-    auth_utils.authenticate_user = lambda *args, **kwargs: mock_get_current_user()
-    auth_utils.get_current_user = lambda *args, **kwargs: mock_get_current_user()
-except ImportError:
-    pass
+def setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
+    """Настройка успешной авторизации для всех HTTP-клиентов"""
+    mock_auth_response = MagicMock()
+    mock_auth_response.status_code = 200
+    mock_auth_response.json.return_value = {
+        "user_id": "test-user-123",
+        "username": "test-user",
+        "valid": True
+    }
+    
+    mock_requests_post.return_value = mock_auth_response
+    mock_requests_get.return_value = mock_auth_response
+    mock_httpx_post.return_value = mock_auth_response
+    mock_httpx_get.return_value = mock_auth_response
 
 client = TestClient(app)
 
@@ -128,8 +100,15 @@ def test_health_endpoint():
     assert "database_connected" in data
 
 
-def test_retrieve_endpoint():
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
+def test_retrieve_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-chunk endpoint with mock data"""
+    
+    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    
     request_data = {
         "query": "contract termination",
         "k": 3
@@ -153,8 +132,15 @@ def test_retrieve_endpoint():
         assert isinstance(result["embedding"], list)
 
 
-def test_retrieve_endpoint_validation():
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
+def test_retrieve_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test retrieve-chunk endpoint input validation"""
+    
+    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    
     # Test empty query
     response = client.post("/api/v1/retrieve-chunk", json={"query": "", "k": 5}, headers=TEST_HEADERS)
     assert response.status_code == 422
@@ -164,8 +150,15 @@ def test_retrieve_endpoint_validation():
     assert response.status_code == 422
 
 
-def test_retrieve_rules_endpoint():
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
+def test_retrieve_rules_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the retrieve-rules endpoint with mock data"""
+    
+    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    
     request_data = {
         "query": "contract termination",
         "k": 3
@@ -196,8 +189,15 @@ def test_retrieve_rules_endpoint():
         assert "file_name" in metadata
 
 
-def test_analyze_endpoint():
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
+def test_analyze_endpoint(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test the analyze endpoint with mock document"""
+    
+    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    
     # Create a test document
     test_content = "This is a test contract with termination clauses."
     test_file = io.BytesIO(test_content.encode('utf-8'))
@@ -222,8 +222,15 @@ def test_analyze_endpoint():
         assert "recommendation" in point
 
 
-def test_analyze_endpoint_validation():
+@patch('requests.post')
+@patch('requests.get')
+@patch('httpx.post')
+@patch('httpx.get')
+def test_analyze_endpoint_validation(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post):
     """Test analyze endpoint input validation"""
+    
+    setup_successful_auth_mocks(mock_httpx_get, mock_httpx_post, mock_requests_get, mock_requests_post)
+    
     # Test missing ID
     test_file = io.BytesIO(b"test content")
     files = {"file": ("test.txt", test_file, "text/plain")}
