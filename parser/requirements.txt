@@ -5,3 +5,9 @@ notebook>=6.0
 matplotlib>=3.0
 seaborn>=0.11
 tqdm>=4.0
+
+# Note: antiword system utility is required for parsing binary .doc files
+# Install instructions:
+#   macOS: brew install antiword
+#   Ubuntu/Debian: sudo apt-get install antiword
+#   Windows: Use WSL, Scoop (scoop install antiword), or Docker
