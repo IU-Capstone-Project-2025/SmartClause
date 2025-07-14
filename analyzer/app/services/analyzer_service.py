@@ -208,7 +208,8 @@ class AnalyzerService(RetryMixin):
                     "risk": analysis_point.risk,
                     "recommendation": analysis_point.recommendation
                 })
-                point_mapping.append((doc_point_idx, len(doc_point.analysis_points) - 1))
+                # FIXED: Use current analysis_idx instead of len() - 1
+                point_mapping.append((doc_point_idx, analysis_idx))
         
         if not all_analysis_points:
             logger.info("No analysis points to validate")
@@ -234,18 +235,22 @@ class AnalyzerService(RetryMixin):
             for doc_point_idx, doc_point in enumerate(analyzed_points):
                 validated_analysis_points = []
                 
-                # Keep only non-invalid analysis points for this document point
+                # FIXED: Properly track which analysis points are invalid
                 for analysis_idx, analysis_point in enumerate(doc_point.analysis_points):
-                    # Find corresponding analysis point in our validation list
+                    # Always keep technical error points
+                    if analysis_point.cause == "Анализ не выполнен из-за технической ошибки":
+                        validated_analysis_points.append(analysis_point)
+                        continue
+                    
+                    # Find corresponding global index in validation results
                     global_idx = None
-                    for i, (mapped_doc_idx, mapped_analysis_idx) in enumerate(point_mapping):
+                    for mapping_idx, (mapped_doc_idx, mapped_analysis_idx) in enumerate(point_mapping):
                         if mapped_doc_idx == doc_point_idx and mapped_analysis_idx == analysis_idx:
-                            global_idx = i
+                            global_idx = mapping_idx
                             break
                     
-                    # Keep point if it's NOT invalid or if it's a technical error (preserve errors)
-                    if (global_idx is not None and global_idx not in invalid_point_ids) or \
-                       analysis_point.cause == "Анализ не выполнен из-за технической ошибки":
+                    # Keep point if it's NOT in the invalid list
+                    if global_idx is not None and global_idx not in invalid_point_ids:
                         validated_analysis_points.append(analysis_point)
                 
                 validated_points.append(DocumentPointAnalysis(
