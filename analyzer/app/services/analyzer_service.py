@@ -200,16 +200,18 @@ class AnalyzerService(RetryMixin):
                 if analysis_point.cause == "Анализ не выполнен из-за технической ошибки":
                     continue
                     
+                # FIXED: ID should be the current index in all_analysis_points array
+                current_id = len(all_analysis_points)
                 all_analysis_points.append({
-                    "id": len(all_analysis_points),
+                    "id": current_id,
                     "document_point_number": doc_point.point_number,
                     "document_point_content": doc_point.point_content,
                     "cause": analysis_point.cause,
                     "risk": analysis_point.risk,
                     "recommendation": analysis_point.recommendation
                 })
-                # FIXED: Use current analysis_idx instead of len() - 1
-                point_mapping.append((doc_point_idx, analysis_idx))
+                # Store mapping with the correct ID that matches all_analysis_points
+                point_mapping.append((doc_point_idx, analysis_idx, current_id))
         
         if not all_analysis_points:
             logger.info("No analysis points to validate")
@@ -242,15 +244,15 @@ class AnalyzerService(RetryMixin):
                         validated_analysis_points.append(analysis_point)
                         continue
                     
-                    # Find corresponding global index in validation results
-                    global_idx = None
-                    for mapping_idx, (mapped_doc_idx, mapped_analysis_idx) in enumerate(point_mapping):
+                    # Find corresponding ID in all_analysis_points
+                    analysis_point_id = None
+                    for mapped_doc_idx, mapped_analysis_idx, mapped_id in point_mapping:
                         if mapped_doc_idx == doc_point_idx and mapped_analysis_idx == analysis_idx:
-                            global_idx = mapping_idx
+                            analysis_point_id = mapped_id
                             break
                     
-                    # Keep point if it's NOT in the invalid list
-                    if global_idx is not None and global_idx not in invalid_point_ids:
+                    # Keep point if it's NOT in the invalid list (compare IDs, not indices)
+                    if analysis_point_id is not None and analysis_point_id not in invalid_point_ids:
                         validated_analysis_points.append(analysis_point)
                 
                 validated_points.append(DocumentPointAnalysis(
