@@ -2,7 +2,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app/backend
       - backend_uploads:/app/uploads
@@ -13,11 +13,14 @@ services:
     depends_on:
       - postgres
       - analyzer
+    networks:
+      - smartclause_network
 
   analyzer:
     build: ./analyzer
+    # Development access - localhost only, secure for deployment
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - ./analyzer:/app
       - ./datasets:/datasets
@@ -25,21 +28,27 @@ services:
       - ./analyzer/.env
     depends_on:
       - postgres
+    networks:
+      - smartclause_network
 
   postgres:
     image: pgvector/pgvector:pg16
     env_file:
       - ./analyzer/.env
-    ports:
-      - "5432:5432"
+    # Remove external port binding - only accessible internally
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./analyzer/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - smartclause_network
 
   chat:
     build: ./chat
+    # Development access - localhost only, secure for deployment
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     volumes:
       - ./chat:/app
     env_file:
@@ -49,12 +58,14 @@ services:
     depends_on:
       - postgres
       - analyzer
+    networks:
+      - smartclause_network
 
   frontend:
     build: ./frontend
     command: npm run serve
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -62,6 +73,16 @@ services:
       - backend
       - analyzer
       - chat
+    networks:
+      - smartclause_network
+
+networks:
+  smartclause_network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
