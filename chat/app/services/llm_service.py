@@ -70,7 +70,7 @@ class LLMService:
             
             legal_response = await retrieval_service.retrieve_legal_rules(
                 query=query_for_rag,
-                k=5,
+                k=20,
                 auth_token=auth_token
             )
             
