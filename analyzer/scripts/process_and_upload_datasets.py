@@ -27,12 +27,12 @@ import psycopg2
 from psycopg2.extras import RealDictCursor, execute_batch
 
 # Add the project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root / "analyzer"))
 
 def load_environment():
     """Load environment variables from .env file."""
-    env_file = project_root / ".env"
+    env_file = project_root / "analyzer" / ".env"
     if env_file.exists():
         load_dotenv(env_file)
         print(f"✓ Loaded environment from {env_file}")
@@ -86,9 +86,9 @@ def connect_to_database(config):
         print(f"❌ Error connecting to database: {e}")
         return None
 
-def find_dataset_files(script_dir):
+def find_dataset_files():
     """Only use rules_dataset.csv and chunks_dataset.csv in datasets directory."""
-    datasets_dir = script_dir.parent.parent / "datasets"
+    datasets_dir = project_root / "datasets"
     files = {}
     rules_file = datasets_dir / "rules_dataset.csv"
     chunks_file = datasets_dir / "chunks_dataset.csv"
@@ -169,7 +169,7 @@ def load_datasets(files):
 def generate_embeddings(chunks_df, embeddings_file=None):
     """Generate embeddings for chunks using the embedding service. Always save to SmartClause/datasets/chunks_with_embeddings.csv."""
     print(f"\n🤖 Generating embeddings...")
-    datasets_dir = Path(__file__).parent.parent.parent / "datasets"
+    datasets_dir = project_root / "datasets"
     embeddings_file = datasets_dir / "chunks_with_embeddings.csv"
     os.makedirs(datasets_dir, exist_ok=True)
     print(f"🔍 Embeddings will be saved to: {embeddings_file}")
@@ -234,49 +234,73 @@ def load_embeddings(embeddings_file):
         return None
 
 def ensure_database_schema(conn):
-    """Ensure the database has the correct schema."""
-    schema_sql = """
-    -- Enable pgvector extension
-    CREATE EXTENSION IF NOT EXISTS vector;
-
-    -- Table for storing legal rules (articles) from Russian legal codes
-    CREATE TABLE IF NOT EXISTS rules (
-        rule_id SERIAL PRIMARY KEY,
-        file VARCHAR(255),
-        rule_number INTEGER,
-        rule_title TEXT,
-        rule_text TEXT,
-        section_title TEXT,
-        chapter_title TEXT,
-        start_char INTEGER,
-        end_char INTEGER,
-        text_length INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    -- Table for storing rule chunks with embeddings
-    CREATE TABLE IF NOT EXISTS rule_chunks (
-        chunk_id SERIAL PRIMARY KEY,
-        rule_id INTEGER REFERENCES rules(rule_id) ON DELETE CASCADE,
-        chunk_number INTEGER,
-        chunk_text TEXT,
-        chunk_char_start INTEGER,
-        chunk_char_end INTEGER,
-        embedding vector(1024),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    -- Create indexes
-    CREATE INDEX IF NOT EXISTS rules_rule_number_idx ON rules (rule_number);
-    CREATE INDEX IF NOT EXISTS rules_file_idx ON rules (file);
-    CREATE INDEX IF NOT EXISTS rule_chunks_rule_id_idx ON rule_chunks (rule_id);
-    CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id, chunk_number);
-    CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 8, ef_construction = 64);
-    """
+    """Ensure the database has the correct schema using init.sql."""
+    init_sql_path = project_root / "analyzer" / "scripts" / "init.sql"
     
     try:
+        # Read schema from init.sql file
+        if init_sql_path.exists():
+            with open(init_sql_path, 'r', encoding='utf-8') as f:
+                schema_sql = f.read()
+            print(f"✓ Using database schema from {init_sql_path}")
+        else:
+            # Fallback to hardcoded schema that matches init.sql
+            print(f"⚠ init.sql not found at {init_sql_path}, using fallback schema")
+            schema_sql = """
+            CREATE EXTENSION IF NOT EXISTS pg_trgm;
+            CREATE EXTENSION IF NOT EXISTS vector;
+
+            CREATE TABLE IF NOT EXISTS rules (
+                rule_id SERIAL PRIMARY KEY,
+                file VARCHAR(255),
+                rule_number INTEGER,
+                rule_title TEXT,
+                rule_text TEXT,
+                section_title TEXT,
+                chapter_title TEXT,
+                start_char INTEGER,
+                end_char INTEGER,
+                text_length INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS rule_chunks (
+                chunk_id SERIAL PRIMARY KEY,
+                rule_id INTEGER REFERENCES rules(rule_id) ON DELETE CASCADE,
+                chunk_number INTEGER,
+                chunk_text TEXT,
+                chunk_char_start INTEGER,
+                chunk_char_end INTEGER,
+                embedding vector(1024),
+                chunk_tsv tsvector GENERATED ALWAYS AS (
+                    to_tsvector('russian', coalesce(chunk_text, ''))
+                ) STORED,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS analysis_results (
+                id SERIAL PRIMARY KEY,
+                document_id VARCHAR(255),
+                user_id VARCHAR(255),
+                analysis_points JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS rule_chunks_embedding_idx ON rule_chunks USING hnsw (embedding vector_l2_ops) WITH (m = 8, ef_construction = 64);
+            CREATE INDEX IF NOT EXISTS rule_chunks_chunk_tsv ON rule_chunks USING GIN (chunk_tsv);
+            CREATE INDEX IF NOT EXISTS rules_rule_number_idx ON rules (rule_number);
+            CREATE INDEX IF NOT EXISTS rules_file_idx ON rules (file);
+            CREATE INDEX IF NOT EXISTS rule_chunks_rule_id_idx ON rule_chunks (rule_id);
+            CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id, chunk_number);
+
+            -- Indexes for analysis results
+            CREATE INDEX IF NOT EXISTS analysis_results_document_id_idx ON analysis_results (document_id);
+            CREATE INDEX IF NOT EXISTS analysis_results_user_id_idx ON analysis_results (user_id);
+            CREATE INDEX IF NOT EXISTS analysis_results_document_user_idx ON analysis_results (document_id, user_id);
+            """
+        
         with conn.cursor() as cur:
             cur.execute(schema_sql)
             conn.commit()
@@ -601,12 +625,11 @@ Examples:
     
     try:
         # Setup
-        script_dir = Path(__file__).parent
         load_environment()
         
         # Find and validate dataset files
         print("🔍 Searching for dataset files...")
-        files = find_dataset_files(script_dir)
+        files = find_dataset_files()
         if not validate_dataset_files(files):
             return 1
         
