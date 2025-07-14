@@ -167,11 +167,13 @@ def load_datasets(files):
         return None, None
 
 def generate_embeddings(chunks_df, embeddings_file=None):
-    """Generate embeddings for chunks using the embedding service. Always save to datasets/chunks_with_embeddings.csv."""
+    """Generate embeddings for chunks using the embedding service. Always save to SmartClause/datasets/chunks_with_embeddings.csv."""
     print(f"\n🤖 Generating embeddings...")
-    from pathlib import Path
-    datasets_dir = Path(__file__).parent.parent / "datasets"
+    datasets_dir = Path(__file__).parent.parent.parent / "datasets"
     embeddings_file = datasets_dir / "chunks_with_embeddings.csv"
+    os.makedirs(datasets_dir, exist_ok=True)
+    print(f"🔍 Embeddings will be saved to: {embeddings_file}")
+
     try:
         # Import embedding service
         from app.services.embedding_service import embedding_service
