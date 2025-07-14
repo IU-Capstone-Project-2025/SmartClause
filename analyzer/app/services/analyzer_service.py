@@ -195,7 +195,7 @@ class AnalyzerService(RetryMixin):
         point_mapping = []  # Track which analysis point belongs to which document point
         
         for doc_point_idx, doc_point in enumerate(analyzed_points):
-            for analysis_point in doc_point.analysis_points:
+            for analysis_idx, analysis_point in enumerate(doc_point.analysis_points):
                 # Skip default error analysis points
                 if analysis_point.cause == "Анализ не выполнен из-за технической ошибки":
                     continue
