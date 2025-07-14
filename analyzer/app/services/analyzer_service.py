@@ -410,39 +410,22 @@ ID: {point['id']}
         total_points = len(document_points)
         logger.info(f"Starting optimized analysis of {total_points} points with concurrency limits")
         
-        # Step 1: Generate embeddings in controlled batches using embedding semaphore
-        logger.info(f"Generating embeddings for {total_points} points")
-        embedding_tasks = [
-            concurrency_manager.with_embedding_limit(
-                asyncio.wait_for(
-                    self._generate_embedding(point.content),
-                    timeout=settings.embedding_timeout
-                )
-            )
-            for point in document_points
-        ]
-        
-        embeddings = await asyncio.gather(*embedding_tasks, return_exceptions=True)
-        successful_embeddings = sum(1 for e in embeddings if not isinstance(e, Exception))
-        logger.info(f"Generated {successful_embeddings}/{total_points} embeddings successfully")
-        
-        # Step 2: Process all points with global concurrency limits
+        # Process all points with global concurrency limits
         logger.info(f"Processing {total_points} points with global concurrency limits")
         analysis_tasks = [
             concurrency_manager.with_global_limit(
                 self._analyze_single_point(
                     point,
                     document_text,
-                    embeddings[i],
                     db
                 )
             )
-            for i, point in enumerate(document_points)
+            for point in document_points
         ]
         
         results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
         
-        # Step 3: Process results and handle failures with detailed logging
+        # Process results and handle failures with detailed logging
         analyzed_points = []
         failed_count = 0
         
@@ -459,33 +442,24 @@ ID: {point['id']}
         
         return analyzed_points
 
-    async def _generate_embedding(self, content: str):
-        """Generate embedding for content"""
-        return await asyncio.to_thread(embedding_service.encode_to_list, content)
-
-    async def _analyze_single_point(self, point, document_text: str, embedding, db: Session) -> DocumentPointAnalysis:
+    async def _analyze_single_point(self, point, document_text: str, db: Session) -> DocumentPointAnalysis:
         """Analyze a single document point"""
         point_start = datetime.now()
         logger.debug(f"Starting analysis for point {point.point_number}")
         
         try:
-            # Handle embedding failure
-            if isinstance(embedding, Exception):
-                logger.warning(f"Using fallback for point {point.point_number} due to embedding failure: {embedding}")
-                context = "Контекст недоступен из-за ошибки генерации embeddings"
-            else:
-                # Run retrieval (simple call without nested retry)
-                try:
-                    context = await asyncio.wait_for(
-                        self._get_context_from_retrieval_service(point.content, db),
-                        timeout=settings.retrieval_timeout
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(f"Retrieval timeout for point {point.point_number}")
-                    context = "Контекст недоступен из-за таймаута поиска"
-                except Exception as e:
-                    logger.warning(f"Retrieval failed for point {point.point_number}: {e}")
-                    context = "Контекст недоступен из-за ошибки поиска"
+            # Get context from retrieval service (it will handle embedding generation internally)
+            try:
+                context = await asyncio.wait_for(
+                    self._get_context_from_retrieval_service(point.content, db),
+                    timeout=settings.retrieval_timeout
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"Retrieval timeout for point {point.point_number}")
+                context = "Контекст недоступен из-за таймаута поиска"
+            except Exception as e:
+                logger.warning(f"Retrieval failed for point {point.point_number}: {e}")
+                context = "Контекст недоступен из-за ошибки поиска"
             
             # Create prompt
             prompt = await self._create_prompt(point.content, document_text)
@@ -512,7 +486,7 @@ ID: {point['id']}
             logger.error(f"Failed to analyze point {point.point_number} after {duration:.2f} seconds: {e}")
             return self._create_fallback_analysis(point)
 
-    async def _get_context_from_retrieval_service(self, point_content: str, db: Session, k: int = 5) -> str:
+    async def _get_context_from_retrieval_service(self, point_content: str, db: Session, k: int = 20) -> str:
         """Get relevant legal context for the point"""
         try:
             # Create a RetrieveRequest for the retrieval service
