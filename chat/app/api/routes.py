@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import logging
@@ -22,33 +22,102 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def extract_user_id_from_header(authorization: Optional[str] = Header(None)) -> str:
+async def extract_user_id_from_request(request: Request, authorization: Optional[str] = None) -> str:
     """
-    Extract user ID from Authorization header.
-    For now, this is a placeholder implementation that returns a default user.
-    In the future, this will parse JWT token and extract user ID.
+    Extract user ID from request (trying both cookies and Authorization header).
+    First tries to get token from cookie, then falls back to Authorization header.
     """
     try:
-        if authorization is None or authorization.strip() == "":
-            logger.debug("No authorization header provided")
-            return "default-user-123"  # Default user for development
+        token = None
+        jwt_cookie_name = "smartclause_token"
         
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-            logger.debug(f"Received Bearer token: {token[:10]}...")
-            # TODO: Parse JWT token and extract user ID
-            # For now, return default user
-            return "default-user-123"
+        # First try to get token from cookie
+        if request is not None:
+            token = request.cookies.get(jwt_cookie_name)
+            if token and token.strip():
+                logger.debug("Found JWT token in cookie")
+            else:
+                token = None
         
-        logger.debug("Authorization header format not recognized")
-        return "default-user-123"
+        # If no token from cookie, try Authorization header
+        if token is None and authorization is not None and authorization.strip():
+            if authorization.startswith("Bearer "):
+                token = authorization[7:]  # Remove "Bearer " prefix
+                if token and token.strip():
+                    logger.debug("Found JWT token in Authorization header")
+                else:
+                    token = None
         
+        if token is None:
+            logger.debug("No JWT token found in cookies or Authorization header")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header or login cookie is required"
+            )
+        
+        logger.debug(f"Received Bearer token: {token[:10]}...")
+        
+        # Validate token with backend service
+        import httpx
+        
+        try:
+            backend_url = "http://backend:8000"  # Backend service URL
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{backend_url}/api/auth/profile",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    user_data = response.json()
+                    user_id = user_data.get("id")
+                    if user_id:
+                        logger.debug(f"Successfully validated token for user: {user_id}")
+                        return user_id
+                    else:
+                        logger.error("Backend returned valid response but no user ID")
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid token: no user ID"
+                        )
+                else:
+                    logger.debug(f"Backend token validation failed: {response.status_code}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid or expired token"
+                    )
+                    
+        except httpx.RequestError as e:
+            logger.error(f"Error connecting to backend for token validation: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service unavailable"
+            )
+        except httpx.TimeoutException:
+            logger.error("Timeout validating token with backend")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service timeout"
+            )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to extract user ID from authorization header: {e}")
+        logger.error(f"Failed to extract user ID from request: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header"
+            detail="Invalid authorization"
         )
+
+
+# Backward compatibility function
+async def extract_user_id_from_header(authorization: Optional[str] = Header(None)) -> str:
+    """
+    Extract user ID from Authorization header by validating JWT token with backend service.
+    This function is kept for backward compatibility.
+    """
+    return await extract_user_id_from_request(None, authorization)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -84,14 +153,23 @@ async def health_check():
 @router.get("/spaces/{space_id}/messages", response_model=GetMessagesResponse)
 async def get_messages(
     space_id: str,
+    request: Request,
     limit: int = 50,
     offset: int = 0,
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None)
 ):
-    """Get chat messages for a space"""
+    """
+    Get chat messages for a space.
+    Supports both cookie-based authentication and Authorization header.
+    """
     try:
-        # Validate space ID format
+        # Extract user ID with cookie and header support
+        user_id = await extract_user_id_from_request(request, authorization)
+        
+        logger.info(f"Get messages request: space_id={space_id}, limit={limit}, offset={offset}, user={user_id}")
+        
+        # Parse space_id as UUID
         try:
             space_uuid = uuid.UUID(space_id)
         except ValueError:
@@ -99,9 +177,6 @@ async def get_messages(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid space ID format"
             )
-        
-        # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
         
         # Validate pagination parameters
         if limit < 1 or limit > 100:
@@ -152,13 +227,22 @@ async def get_messages(
 @router.post("/spaces/{space_id}/messages", response_model=SendMessageResponse)
 async def send_message(
     space_id: str,
-    request: SendMessageRequest,
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    request_data: SendMessageRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None)
 ):
-    """Send a message to space chat"""
+    """
+    Send a message and get AI response.
+    Supports both cookie-based authentication and Authorization header.
+    """
     try:
-        # Validate space ID format
+        # Extract user ID with cookie and header support
+        user_id = await extract_user_id_from_request(request, authorization)
+        
+        logger.info(f"Send message request: space_id={space_id}, user={user_id}")
+        
+        # Parse space_id as UUID
         try:
             space_uuid = uuid.UUID(space_id)
         except ValueError:
@@ -167,8 +251,25 @@ async def send_message(
                 detail="Invalid space ID format"
             )
         
-        # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        # Validate message content
+        if not request_data.content or not request_data.content.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message content cannot be empty"
+            )
+        
+        # Extract JWT token for service calls (pass raw token, not with Bearer prefix)
+        auth_token = None
+        token = None
+        # First try to get token from cookie
+        if request is not None:
+            token = request.cookies.get("smartclause_token")
+        # If no token from cookie, try Authorization header
+        if token is None and authorization and authorization.startswith("Bearer "):
+            token = authorization[7:]
+        # Pass raw token (services will add Bearer prefix themselves)
+        if token:
+            auth_token = token
         
         logger.info(f"Processing message from user {user_id} in space {space_id}")
         
@@ -176,7 +277,7 @@ async def send_message(
         user_message = await memory_service.save_message(
             space_id=space_uuid,
             user_id=user_id,
-            content=request.content,
+            content=request_data.content,
             message_type=MessageType.USER,
             metadata={},
             db=db
@@ -189,12 +290,13 @@ async def send_message(
             db=db
         )
         
-        # Generate assistant response
+        # Generate assistant response with JWT token
         response_text, response_metadata = await llm_service.generate_response(
-            user_message=request.content,
+            user_message=request_data.content,
             conversation_history=conversation_history,
             space_id=space_id,
-            user_id=user_id
+            user_id=user_id,
+            auth_token=auth_token
         )
         
         # Save assistant message
@@ -217,7 +319,7 @@ async def send_message(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error sending message to space {space_id}: {e}")
+        logger.error(f"Error processing message for space {space_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while processing message"
@@ -227,12 +329,21 @@ async def send_message(
 @router.get("/spaces/{space_id}/session", response_model=ChatSessionResponse)
 async def get_chat_session(
     space_id: str,
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None)
 ):
-    """Get chat session information for a space"""
+    """
+    Get chat session configuration.
+    Supports both cookie-based authentication and Authorization header.
+    """
     try:
-        # Validate space ID format
+        # Extract user ID with cookie and header support
+        user_id = await extract_user_id_from_request(request, authorization)
+        
+        logger.info(f"Get chat session request: space_id={space_id}, user={user_id}")
+        
+        # Parse space_id as UUID
         try:
             space_uuid = uuid.UUID(space_id)
         except ValueError:
@@ -240,9 +351,6 @@ async def get_chat_session(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid space ID format"
             )
-        
-        # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
         
         # Get or create session
         session = await memory_service.get_or_create_session(
@@ -272,13 +380,22 @@ async def get_chat_session(
 @router.put("/spaces/{space_id}/session/memory", response_model=ChatSessionResponse)
 async def update_memory_length(
     space_id: str,
-    request: ChatMemoryConfigRequest,
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    request_data: ChatMemoryConfigRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None)
 ):
-    """Update memory length for chat session"""
+    """
+    Update chat memory configuration.
+    Supports both cookie-based authentication and Authorization header.
+    """
     try:
-        # Validate space ID format
+        # Extract user ID with cookie and header support
+        user_id = await extract_user_id_from_request(request, authorization)
+        
+        logger.info(f"Update memory length request: space_id={space_id}, memory_length={request_data.memory_length}, user={user_id}")
+        
+        # Parse space_id as UUID
         try:
             space_uuid = uuid.UUID(space_id)
         except ValueError:
@@ -287,14 +404,18 @@ async def update_memory_length(
                 detail="Invalid space ID format"
             )
         
-        # Extract user ID
-        user_id = extract_user_id_from_header(authorization)
+        # Validate memory length
+        if request_data.memory_length < 1 or request_data.memory_length > 50:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Memory length must be between 1 and 50"
+            )
         
         # Update session memory length
         session = await memory_service.update_session_memory_length(
             space_id=space_uuid,
             user_id=user_id,
-            memory_length=request.memory_length,
+            memory_length=request_data.memory_length,
             db=db
         )
         

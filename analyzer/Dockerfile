@@ -25,6 +25,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download nltk files
+COPY scripts/setup_nltk.py .
+RUN python setup_nltk.py
+
 # Install the embedding model
 COPY scripts/init_model.py .
 RUN python init_model.py

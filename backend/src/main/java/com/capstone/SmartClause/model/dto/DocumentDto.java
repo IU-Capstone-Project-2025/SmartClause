@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import io.swagger.v3.oas.annotations.media.Schema;
+import org.springframework.web.multipart.MultipartFile;
 
 public class DocumentDto {
     
@@ -51,5 +53,13 @@ public class DocumentDto {
         private String id;
         private String name;
         private byte[] content;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DocumentUploadRequest {
+        @Schema(type = "string", format = "binary", description = "File to upload")
+        private MultipartFile file;
     }
 } 

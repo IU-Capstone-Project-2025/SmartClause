@@ -14,6 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Set executable permissions for scripts
+RUN chmod +x scripts/init_db.sh
+RUN chmod +x start.sh
+
 # Expose the port
 EXPOSE 8002
 
@@ -21,5 +25,5 @@ EXPOSE 8002
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Run the FastAPI application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"] 
+# Run the startup script using bash directly
+CMD ["bash", "/app/start.sh"] 

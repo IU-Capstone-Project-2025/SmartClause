@@ -6,7 +6,11 @@
         <p class="subtitle">Upload a contract, and our AI assistant will identify risks and suggest improvements.</p>
       </div>
       <div class="upload-box-wrapper">
-        <div class="upload-box" @dragover.prevent @drop.prevent="handleFileDrop">
+        <div v-if="isAuthorized" class="authorized-suggestion">
+          <p>You are logged in. You can upload documents to your spaces.</p>
+          <button class="spaces-button" @click="goToSpaces">Go to Spaces</button>
+        </div>
+        <div class="upload-box" @dragover.prevent @drop.prevent="handleFileDrop" v-if="!isAuthorized">
           <div class="upload-content">
             <p>Drag and drop your document here or select a file</p>
             <button class="upload-button" @click="triggerFileInput">
@@ -17,6 +21,7 @@
           </div>
           <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none;" accept=".docx,.pdf">
         </div>
+        <p v-if="uploadError" class="error-text">{{ uploadError }}</p>
       </div>
     </div>
     <div class="side-content">
@@ -46,6 +51,17 @@ export default {
     FileText,
     Lightbulb,
   },
+  data() {
+    return {
+      isAuthorized: false,
+      uploadError: null,
+    };
+  },
+  created() {
+    if (typeof window.localStorage !== 'undefined') {
+      this.isAuthorized = !!localStorage.getItem('access_token');
+    }
+  },
   methods: {
     triggerFileInput() {
       this.$refs.fileInput.click();
@@ -63,6 +79,16 @@ export default {
       }
     },
     processFile(file) {
+      this.uploadError = null;
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        this.uploadError = 'File is too large. The maximum file size is 10MB.';
+        if (this.$refs.fileInput) {
+          this.$refs.fileInput.value = '';
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         // eslint-disable-next-line
@@ -72,6 +98,9 @@ export default {
         this.$router.push({ name: 'Processing' });
       };
       reader.readAsDataURL(file);
+    },
+    goToSpaces() {
+      this.$router.push({ name: 'Chat' });
     }
   }
 }
@@ -133,8 +162,16 @@ export default {
   color: #a0aec0;
 }
 
+.error-text {
+  color: #ef4444;
+  margin-top: 1rem;
+  font-size: 14px;
+  text-align: center;
+}
+
 .upload-box-wrapper {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
 }
@@ -225,5 +262,35 @@ export default {
 .info-card .icon svg {
   color: #60a5fa;
   filter: drop-shadow(0 0 8px rgba(96, 165, 250, 1));
+}
+
+.authorized-suggestion {
+  text-align: center;
+  margin-bottom: 40px;
+  background-color: rgba(30, 41, 59, 0.5);
+  border: 1px solid #3a4b68;
+  border-radius: 15px;
+  padding: 30px;
+  backdrop-filter: blur(10px);
+}
+
+.authorized-suggestion p {
+  color: #a0aec0;
+  margin-bottom: 20px;
+}
+
+.spaces-button {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.spaces-button:hover {
+  background-color: #1d4ed8;
 }
 </style> 
