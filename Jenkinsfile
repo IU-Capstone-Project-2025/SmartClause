@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'master' }
 
     environment {
         OPENROUTER_API_KEY = credentials('OPENROUTER_API_KEY')
