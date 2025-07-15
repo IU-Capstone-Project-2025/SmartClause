@@ -5,32 +5,61 @@ pipeline {
         OPENROUTER_API_KEY = credentials('OPENROUTER_API_KEY')
     }
 
-    
-
     stages {
         stage('Notify Start') {
             steps {
                 script {
-                    githubNotify context: 'CI', status: 'PENDING', description: 'Jenkins pipeline started'
+                    def sha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    githubNotify(
+                        context: 'CI',
+                        status: 'PENDING',
+                        description: 'Jenkins pipeline started',
+                        repo: 'SmartClause',
+                        account: 'IU-Capstone-Project-2025',
+                        credentialsId: 'user',
+                        sha: sha
+                    )
                 }
             }
         }
+
         stage('Checkout') {
             steps {
                 script {
-                    githubNotify context: 'Checkout', status: 'PENDING'
+                    githubNotify(
+                        context: 'Checkout',
+                        status: 'PENDING',
+                        repo: 'SmartClause',
+                        account: 'IU-Capstone-Project-2025',
+                        credentialsId: 'user',
+                        sha: env.GIT_COMMIT
+                    )
                 }
                 checkout scm
             }
             post {
                 success {
                     script {
-                        githubNotify context: 'Checkout', status: 'SUCCESS'
+                        githubNotify(
+                            context: 'Checkout',
+                            status: 'SUCCESS',
+                            repo: 'SmartClause',
+                            account: 'IU-Capstone-Project-2025',
+                            credentialsId: 'user',
+                            sha: env.GIT_COMMIT
+                        )
                     }
                 }
                 failure {
                     script {
-                        githubNotify context: 'Checkout', status: 'FAILURE'
+                        githubNotify(
+                            context: 'Checkout',
+                            status: 'FAILURE',
+                            repo: 'SmartClause',
+                            account: 'IU-Capstone-Project-2025',
+                            credentialsId: 'user',
+                            sha: env.GIT_COMMIT
+                        )
                     }
                 }
             }
@@ -47,12 +76,19 @@ pipeline {
                     }
                     steps {
                         script {
-                            githubNotify context: 'Python Service', status: 'PENDING'
+                            githubNotify(
+                                context: 'Python Service',
+                                status: 'PENDING',
+                                repo: 'SmartClause',
+                                account: 'IU-Capstone-Project-2025',
+                                credentialsId: 'user',
+                                sha: env.GIT_COMMIT
+                            )
                         }
-                        
+
                         sh 'mkdir -p /cache/huggingface'
                         sh 'chmod -R 777 /cache'
-                        
+
                         dir('analyzer') {
                             sh 'python -m venv venv'
                             sh './venv/bin/pip install -r requirements.txt'
@@ -62,12 +98,26 @@ pipeline {
                     post {
                         success {
                             script {
-                                githubNotify context: 'Python Service', status: 'SUCCESS'
+                                githubNotify(
+                                    context: 'Python Service',
+                                    status: 'SUCCESS',
+                                    repo: 'SmartClause',
+                                    account: 'IU-Capstone-Project-2025',
+                                    credentialsId: 'user',
+                                    sha: env.GIT_COMMIT
+                                )
                             }
                         }
                         failure {
                             script {
-                                githubNotify context: 'Python Service', status: 'FAILURE'
+                                githubNotify(
+                                    context: 'Python Service',
+                                    status: 'FAILURE',
+                                    repo: 'SmartClause',
+                                    account: 'IU-Capstone-Project-2025',
+                                    credentialsId: 'user',
+                                    sha: env.GIT_COMMIT
+                                )
                             }
                         }
                     }
@@ -82,12 +132,19 @@ pipeline {
                     }
                     steps {
                         script {
-                            githubNotify context: 'Java Service', status: 'PENDING'
+                            githubNotify(
+                                context: 'Java Service',
+                                status: 'PENDING',
+                                repo: 'SmartClause',
+                                account: 'IU-Capstone-Project-2025',
+                                credentialsId: 'user',
+                                sha: env.GIT_COMMIT
+                            )
                         }
 
                         sh 'mkdir -p /root/.m2/repository'
                         sh 'chmod -R 777 /root/.m2/repository'
-                        
+
                         dir('backend') {
                             sh 'mvn -Dmaven.repo.local=/root/.m2/repository clean package'
                             sh 'mvn -Dmaven.repo.local=/root/.m2/repository test'
@@ -96,12 +153,26 @@ pipeline {
                     post {
                         success {
                             script {
-                                githubNotify context: 'Java Service', status: 'SUCCESS'
+                                githubNotify(
+                                    context: 'Java Service',
+                                    status: 'SUCCESS',
+                                    repo: 'SmartClause',
+                                    account: 'IU-Capstone-Project-2025',
+                                    credentialsId: 'user',
+                                    sha: env.GIT_COMMIT
+                                )
                             }
                         }
                         failure {
                             script {
-                                githubNotify context: 'Java Service', status: 'FAILURE'
+                                githubNotify(
+                                    context: 'Java Service',
+                                    status: 'FAILURE',
+                                    repo: 'SmartClause',
+                                    account: 'IU-Capstone-Project-2025',
+                                    credentialsId: 'user',
+                                    sha: env.GIT_COMMIT
+                                )
                             }
                         }
                     }
@@ -115,7 +186,14 @@ pipeline {
             }
             steps {
                 script {
-                    githubNotify context: 'Deploy', status: 'PENDING'
+                    githubNotify(
+                        context: 'Deploy',
+                        status: 'PENDING',
+                        repo: 'SmartClause',
+                        account: 'IU-Capstone-Project-2025',
+                        credentialsId: 'user',
+                        sha: env.GIT_COMMIT
+                    )
                 }
 
                 echo "Starting deployment stage on Jenkins side"
@@ -137,12 +215,26 @@ pipeline {
             post {
                 success {
                     script {
-                        githubNotify context: 'Deploy', status: 'SUCCESS'
+                        githubNotify(
+                            context: 'Deploy',
+                            status: 'SUCCESS',
+                            repo: 'SmartClause',
+                            account: 'IU-Capstone-Project-2025',
+                            credentialsId: 'user',
+                            sha: env.GIT_COMMIT
+                        )
                     }
                 }
                 failure {
                     script {
-                        githubNotify context: 'Deploy', status: 'FAILURE'
+                        githubNotify(
+                            context: 'Deploy',
+                            status: 'FAILURE',
+                            repo: 'SmartClause',
+                            account: 'IU-Capstone-Project-2025',
+                            credentialsId: 'user',
+                            sha: env.GIT_COMMIT
+                        )
                     }
                 }
             }
@@ -152,13 +244,29 @@ pipeline {
     post {
         success {
             script {
-                githubNotify context: 'CI', status: 'SUCCESS', description: 'Jenkins build passed'
+                githubNotify(
+                    context: 'CI',
+                    status: 'SUCCESS',
+                    description: 'Jenkins build passed',
+                    repo: 'SmartClause',
+                    account: 'IU-Capstone-Project-2025',
+                    credentialsId: 'user',
+                    sha: env.GIT_COMMIT
+                )
             }
             echo 'All services have been successfully built, tested, and deployed!'
         }
         failure {
             script {
-                githubNotify context: 'CI', status: 'FAILURE', description: 'Jenkins build failed'
+                githubNotify(
+                    context: 'CI',
+                    status: 'FAILURE',
+                    description: 'Jenkins build failed',
+                    repo: 'SmartClause',
+                    account: 'IU-Capstone-Project-2025',
+                    credentialsId: 'user',
+                    sha: env.GIT_COMMIT
+                )
             }
             echo 'Error occurred in one of the CI/CD pipeline stages'
         }
