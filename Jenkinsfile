@@ -5,7 +5,16 @@ pipeline {
         OPENROUTER_API_KEY = credentials('OPENROUTER_API_KEY')
     }
 
+    
+
     stages {
+        stage('Notify Start') {
+            steps {
+                script {
+                    githubNotify context: 'CI', status: 'PENDING', description: 'Jenkins pipeline started'
+                }
+            }
+        }
         stage('Checkout') {
             steps {
                 script {
@@ -141,11 +150,6 @@ pipeline {
     }
 
     post {
-        started {
-            script {
-                githubNotify context: 'CI', status: 'PENDING', description: 'Jenkins pipeline started'
-            }
-        }
         success {
             script {
                 githubNotify context: 'CI', status: 'SUCCESS', description: 'Jenkins build passed'
