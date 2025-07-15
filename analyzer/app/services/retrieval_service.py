@@ -180,6 +180,36 @@ class RetrievalService:
                 best_by_rule[rule_id] = res
 
         sorted_rules = sorted(best_by_rule.values(), key=lambda r: r.similarity_score, reverse=True)[: request.k]
+
+        # Now fetch the full rule text for each rule_id
+        rule_ids = [res.metadata.rule_number for res in sorted_rules]
+        rules_sql = text("""
+            SELECT rule_number, rule_text, file, rule_title, section_title, chapter_title, start_char, end_char
+            FROM rules
+            WHERE rule_number = ANY(:rule_ids)
+        """)
+        rules_rows = {row.rule_number: row for row in db.execute(rules_sql, {'rule_ids': rule_ids}).fetchall()}
+
+        results = []
+        for res in sorted_rules:
+            rule_row = rules_rows.get(res.metadata.rule_number)
+            if rule_row:
+                results.append(RetrieveResult(
+                    text=rule_row.rule_text,
+                    embedding=res.embedding,  # or None, or aggregate if you want
+                    similarity_score=res.similarity_score,
+                    metadata=DocumentMetadata(
+                        file_name=rule_row.file,
+                        rule_number=rule_row.rule_number,
+                        rule_title=rule_row.rule_title,
+                        section_title=rule_row.section_title,
+                        chapter_title=rule_row.chapter_title,
+                        start_char=rule_row.start_char,
+                        end_char=rule_row.end_char,
+                        text_length=rule_row.end_char - rule_row.start_char,
+                    ),
+                ))
+
         t2 = time.perf_counter()
 
         logger.debug(
@@ -191,8 +221,8 @@ class RetrievalService:
 
         return RetrieveResponse(
             query=request.query,
-            results=sorted_rules,
-            total_results=len(sorted_rules),
+            results=results,
+            total_results=len(results),
             distance_function=f"rrf(bm25+{distance.value}) (sql) – unique rules",
         )
 
