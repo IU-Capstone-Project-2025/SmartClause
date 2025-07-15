@@ -16,7 +16,7 @@ pipeline {
                         description: 'Jenkins pipeline started',
                         repo: 'SmartClause',
                         account: 'IU-Capstone-Project-2025',
-                        credentialsId: 'user',
+                        credentialsId: 'github-api-token',
                         sha: sha
                     )
                 }
@@ -31,7 +31,7 @@ pipeline {
                         status: 'PENDING',
                         repo: 'SmartClause',
                         account: 'IU-Capstone-Project-2025',
-                        credentialsId: 'user',
+                        credentialsId: 'github-api-token',
                         sha: env.GIT_COMMIT
                     )
                 }
@@ -45,7 +45,7 @@ pipeline {
                             status: 'SUCCESS',
                             repo: 'SmartClause',
                             account: 'IU-Capstone-Project-2025',
-                            credentialsId: 'user',
+                            credentialsId: 'github-api-token',
                             sha: env.GIT_COMMIT
                         )
                     }
@@ -57,7 +57,7 @@ pipeline {
                             status: 'FAILURE',
                             repo: 'SmartClause',
                             account: 'IU-Capstone-Project-2025',
-                            credentialsId: 'user',
+                            credentialsId: 'github-api-token',
                             sha: env.GIT_COMMIT
                         )
                     }
@@ -81,7 +81,7 @@ pipeline {
                                 status: 'PENDING',
                                 repo: 'SmartClause',
                                 account: 'IU-Capstone-Project-2025',
-                                credentialsId: 'user',
+                                credentialsId: 'github-api-token',
                                 sha: env.GIT_COMMIT
                             )
                         }
@@ -103,7 +103,7 @@ pipeline {
                                     status: 'SUCCESS',
                                     repo: 'SmartClause',
                                     account: 'IU-Capstone-Project-2025',
-                                    credentialsId: 'user',
+                                    credentialsId: 'github-api-token',
                                     sha: env.GIT_COMMIT
                                 )
                             }
@@ -115,7 +115,7 @@ pipeline {
                                     status: 'FAILURE',
                                     repo: 'SmartClause',
                                     account: 'IU-Capstone-Project-2025',
-                                    credentialsId: 'user',
+                                    credentialsId: 'github-api-token',
                                     sha: env.GIT_COMMIT
                                 )
                             }
@@ -137,7 +137,7 @@ pipeline {
                                 status: 'PENDING',
                                 repo: 'SmartClause',
                                 account: 'IU-Capstone-Project-2025',
-                                credentialsId: 'user',
+                                credentialsId: 'github-api-token',
                                 sha: env.GIT_COMMIT
                             )
                         }
@@ -158,7 +158,7 @@ pipeline {
                                     status: 'SUCCESS',
                                     repo: 'SmartClause',
                                     account: 'IU-Capstone-Project-2025',
-                                    credentialsId: 'user',
+                                    credentialsId: 'github-api-token',
                                     sha: env.GIT_COMMIT
                                 )
                             }
@@ -170,7 +170,7 @@ pipeline {
                                     status: 'FAILURE',
                                     repo: 'SmartClause',
                                     account: 'IU-Capstone-Project-2025',
-                                    credentialsId: 'user',
+                                    credentialsId: 'github-api-token',
                                     sha: env.GIT_COMMIT
                                 )
                             }
@@ -191,7 +191,7 @@ pipeline {
                         status: 'PENDING',
                         repo: 'SmartClause',
                         account: 'IU-Capstone-Project-2025',
-                        credentialsId: 'user',
+                        credentialsId: 'github-api-token',
                         sha: env.GIT_COMMIT
                     )
                 }
@@ -220,7 +220,7 @@ pipeline {
                             status: 'SUCCESS',
                             repo: 'SmartClause',
                             account: 'IU-Capstone-Project-2025',
-                            credentialsId: 'user',
+                            credentialsId: 'github-api-token',
                             sha: env.GIT_COMMIT
                         )
                     }
@@ -232,7 +232,7 @@ pipeline {
                             status: 'FAILURE',
                             repo: 'SmartClause',
                             account: 'IU-Capstone-Project-2025',
-                            credentialsId: 'user',
+                            credentialsId: 'github-api-token',
                             sha: env.GIT_COMMIT
                         )
                     }
@@ -250,7 +250,7 @@ pipeline {
                     description: 'Jenkins build passed',
                     repo: 'SmartClause',
                     account: 'IU-Capstone-Project-2025',
-                    credentialsId: 'user',
+                    credentialsId: 'github-api-token',
                     sha: env.GIT_COMMIT
                 )
             }
@@ -264,7 +264,7 @@ pipeline {
                     description: 'Jenkins build failed',
                     repo: 'SmartClause',
                     account: 'IU-Capstone-Project-2025',
-                    credentialsId: 'user',
+                    credentialsId: 'github-api-token',
                     sha: env.GIT_COMMIT
                 )
             }
