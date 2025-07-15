@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        OPENROUTER_API_KEY = credentials('OPENROUTER_API_KEY')
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -10,7 +14,16 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Python Service') {
+                    agent {
+                        docker {
+                            image 'python:3.11'
+                            args '-v ${WORKSPACE}/python-cache:/cache -e TRANSFORMERS_CACHE=/cache/huggingface -e HF_HOME=/cache/huggingface -e XDG_CACHE_HOME=/cache -u root'
+                        }
+                    }
                     steps {
+                        sh 'mkdir -p /cache/huggingface'
+                        sh 'chmod -R 777 /cache'
+                        
                         dir('analyzer') {
                             sh 'python -m venv venv'
                             sh './venv/bin/pip install -r requirements.txt'
@@ -19,43 +32,44 @@ pipeline {
                     }
                 }
                 stage('Java Service') {
-                    steps {
-                        dir('backend') {
-                            sh 'mvn clean package'
-                            sh 'mvn test'
+                    agent {
+                        docker {
+                            image 'maven:3.9.6-eclipse-temurin-21'
+                            args '-v ${WORKSPACE}/maven-repo:/root/.m2/repository -u root'
                         }
                     }
-                }
-                stage('Frontend') {
                     steps {
-                        sleep(time: 10, unit: 'SECONDS')
-                        retry(5) {
-                            script {
-                                try {
-                                    def statusCode = sh(
-                                        script: 'curl -s -o /dev/null -w "%{http_code}" http://158.160.190.57:8080',
-                                        returnStdout: true
-                                    ).trim()
-                                    
-                                    if (statusCode == "200") {
-                                        echo "Frontend successfully started and responds with code: ${statusCode}"
-                                    } else {
-                                        error "Frontend responded with incorrect status code: ${statusCode}"
-                                    }
-                                } catch (Exception e) {
-                                    error "Failed to connect to frontend: ${e.message}"
-                                }
-                            }
-                            sleep(time: 5, unit: 'SECONDS')
+                        sh 'mkdir -p /root/.m2/repository'
+                        sh 'chmod -R 777 /root/.m2/repository'
+                        
+                        dir('backend') {
+                            sh 'mvn -Dmaven.repo.local=/root/.m2/repository clean package'
+                            sh 'mvn -Dmaven.repo.local=/root/.m2/repository test'
                         }
                     }
                 }
             }
         }
         stage('Deploy') {
+            when {
+                branch 'main'
+            }
             steps {
-                sh 'docker compose down'
-                sh 'docker compose up -d --build'
+                echo "Starting deployment stage on Jenkins side"
+                sshagent(['deploy-key-id']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
+                            echo "=== Starting deployment ===" &&
+                            cd SmartClause &&
+                            git pull &&
+                            ./docker/build_frontend.sh &&
+                            docker compose down &&
+                            docker compose up -d --build &&
+                            echo "=== Deploy completed successfully ==="
+                        '
+                    '''
+                }
+                echo "Deploy stage finished successfully on Jenkins side"
             }
         }
     }
