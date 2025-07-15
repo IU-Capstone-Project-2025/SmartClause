@@ -9,6 +9,10 @@ pipeline {
         stage('Notify Start') {
             steps {
                 script {
+                    withCredentials([string(credentialsId: 'github_api_token', variable: 'GITHUB_TOKEN')]) {
+                        sh 'echo "TOKEN=$GITHUB_TOKEN"'
+                    }
+
                     def sha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     githubNotify(
                         context: 'CI',
