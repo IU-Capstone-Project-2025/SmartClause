@@ -51,6 +51,9 @@ pipeline {
             }
         }
         stage('Deploy') {
+            when {
+                branch 'main'
+            }
             steps {
                 echo "Starting deployment stage on Jenkins side"
                 sshagent(['deploy-key-id']) {
@@ -59,6 +62,7 @@ pipeline {
                             echo "=== Starting deployment ===" &&
                             cd SmartClause &&
                             git pull &&
+                            ./docker/build_frontend.sh &&
                             docker compose down &&
                             docker compose up -d --build &&
                             echo "=== Deploy completed successfully ==="
