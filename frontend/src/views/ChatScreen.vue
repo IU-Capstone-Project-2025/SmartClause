@@ -195,7 +195,10 @@ export default {
             name: file.name,
         }));
         
-        this.uploadingFiles[currentSpaceId] = [...(this.uploadingFiles[currentSpaceId] || []), ...newUploadingFiles];
+        this.uploadingFiles = {
+          ...this.uploadingFiles,
+          [currentSpaceId]: [...(this.uploadingFiles[currentSpaceId] || []), ...newUploadingFiles]
+        };
 
         try {
             await Promise.all(Array.from(files).map(file => api.uploadDocument(currentSpaceId, file)));
@@ -203,17 +206,22 @@ export default {
             console.error('Error uploading files:', error);
             // Here you could add more user-facing error handling
         } finally {
-            // Refresh the documents list from the server
-            try {
-                const documentsRes = await api.getDocuments(currentSpaceId);
-                this.documents = documentsRes.data.documents || [];
-            } catch (e) {
-                console.error('Error fetching documents after upload:', e);
+            // Refresh the documents list from the server, but only if we are still in the same space
+            if (this.selectedSpaceId === currentSpaceId) {
+                try {
+                    const documentsRes = await api.getDocuments(currentSpaceId);
+                    this.documents = documentsRes.data.documents || [];
+                } catch (e) {
+                    console.error('Error fetching documents after upload:', e);
+                }
             }
             // Remove the files that were just being uploaded from the uploadingFiles list
             const newUploadingFileIds = new Set(newUploadingFiles.map(f => f.id));
             if (this.uploadingFiles[currentSpaceId]) {
-                this.uploadingFiles[currentSpaceId] = this.uploadingFiles[currentSpaceId].filter(f => !newUploadingFileIds.has(f.id));
+                this.uploadingFiles = {
+                  ...this.uploadingFiles,
+                  [currentSpaceId]: this.uploadingFiles[currentSpaceId].filter(f => !newUploadingFileIds.has(f.id))
+                };
             }
         }
     },
