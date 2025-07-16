@@ -12,7 +12,7 @@
       <div class="results-header">
         <h2>{{ $t('resultsScreen.title') }}</h2>
         <div class="header-controls">
-          <button class="export-button" @click="exportAnalysis" :disabled="isExporting" title="Export analysis">
+          <button class="export-button" @click="exportAnalysis" :disabled="isExporting" :title="$t('documentAnalysis.exportAnalysisTitle')">
             <div v-if="isExporting" class="button-spinner"></div>
             <DownloadIcon v-else class="export-icon" />
             <span>{{ isExporting ? $t('documentAnalysis.exporting') : $t('documentAnalysis.export') }}</span>
@@ -134,7 +134,6 @@ export default {
         window.URL.revokeObjectURL(url);
       } catch (error) {
         console.error('Error exporting analysis:', error);
-        // Here you could add a user-facing error notification
       } finally {
         this.isExporting = false;
       }

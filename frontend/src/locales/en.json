@@ -20,7 +20,9 @@
     "newSpace": "New Space",
     "settings": "Settings",
     "noSpaces": "No spaces yet",
-    "createSpace": "Create one to start collaborating"
+    "createSpace": "Create one to start collaborating",
+    "editSpace": "Edit space",
+    "deleteSpace": "Delete space"
   },
   "documentsSidebar": {
     "title": "Documents",
@@ -29,7 +31,10 @@
     "uploadToStart": "Upload files to start analyzing",
     "invalidFilesError": "Some files were invalid. Only .pdf and .docx files under 10MB are allowed.",
     "reanalysisError": "Failed to start re-analysis. Please try again.",
-    "uploadError": "An unexpected error occurred during upload."
+    "uploadError": "An unexpected error occurred during upload.",
+    "reanalyzeDocument": "Re-analyze document",
+    "seeAnalysis": "See the analysis",
+    "deleteDocument": "Delete document"
   },
   "createSpaceModal": {
     "title": "Create New Space",
@@ -63,7 +68,8 @@
     "noMessages": "No messages yet",
     "askQuestion": "Ask a question to start the conversation",
     "selectSpace": "Select a space",
-    "createNewSpace": "or create a new one to begin"
+    "createNewSpace": "or create a new one to begin",
+    "sendMessage": "Send message"
   },
   "uploadScreen": {
     "title": "Secure deals start here",
@@ -103,7 +109,8 @@
     "loading": "Analyzing document...",
     "error": "Error loading analysis results.",
     "export": "Export",
-    "exporting": "Exporting..."
+    "exporting": "Exporting...",
+    "exportAnalysisTitle": "Export analysis"
   },
   "authScreen": {
     "welcomeBack": "Welcome Back",
