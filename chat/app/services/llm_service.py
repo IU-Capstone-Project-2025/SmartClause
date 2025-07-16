@@ -34,7 +34,7 @@ class LLMService:
         conversation_history: List[Message],
         space_id: str,
         user_id: str,
-        auth_token: str = None
+        service_token: str = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Generate LLM response with legal context
@@ -44,15 +44,17 @@ class LLMService:
             conversation_history: Previous messages for context
             space_id: Space ID for context
             user_id: User ID
-            auth_token: JWT token for service authentication
+            service_token: JWT token for service-to-service calls
             
         Returns:
             Tuple of (response_text, metadata)
         """
         try:
             # Get document analysis context from the same space
-            space_documents = await document_service.get_space_documents_with_analysis(space_id, user_id, auth_token)
+            space_documents = await document_service.get_space_documents_with_analysis(space_id, user_id, service_token)
+            logger.info(f"Retrieved space documents: {space_documents}")
             document_analysis_context = document_service.format_analysis_for_llm(space_documents)
+            logger.info(f"Formatted document analysis context: '{document_analysis_context[:200]}...' ({len(document_analysis_context)} chars)")
             
             # Extract legal concepts from documents for better RAG queries
             legal_concepts = self._extract_legal_concepts_from_documents(space_documents)
@@ -70,8 +72,7 @@ class LLMService:
             
             legal_response = await retrieval_service.retrieve_legal_rules(
                 query=query_for_rag,
-                k=20,
-                auth_token=auth_token
+                k=20
             )
             
             # Format conversation history for LLM
