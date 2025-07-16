@@ -26,7 +26,10 @@
     "title": "Documents",
     "uploadDocuments": "Upload",
     "noDocuments": "No documents",
-    "uploadToStart": "Upload files to start analyzing"
+    "uploadToStart": "Upload files to start analyzing",
+    "invalidFilesError": "Some files were invalid. Only .pdf and .docx files under 10MB are allowed.",
+    "reanalysisError": "Failed to start re-analysis. Please try again.",
+    "uploadError": "An unexpected error occurred during upload."
   },
   "createSpaceModal": {
     "title": "Create New Space",

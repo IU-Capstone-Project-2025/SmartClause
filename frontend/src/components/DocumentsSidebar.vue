@@ -109,7 +109,7 @@ export default {
       }
 
       if (invalidFiles.length > 0) {
-        this.uploadError = 'Some files were invalid. Only .pdf and .docx files under 10MB are allowed.';
+        this.uploadError = this.$t('documentsSidebar.invalidFilesError');
       }
 
       if (validFiles.length > 0) {
@@ -144,6 +144,7 @@ export default {
     },
     async promptReanalyze(doc) {
       if (this.reanalyzingDocIds.includes(doc.id)) return;
+      this.uploadError = null;
 
       this.reanalyzingDocIds.push(doc.id);
       try {
@@ -163,7 +164,7 @@ export default {
         });
       } catch (error) {
         console.error('Error triggering re-analysis:', error);
-        this.uploadError = 'Failed to start re-analysis. Please try again.';
+        this.uploadError = error.response?.data?.error || this.$t('documentsSidebar.reanalysisError');
         const index = this.reanalyzingDocIds.indexOf(doc.id);
         if (index > -1) {
           this.reanalyzingDocIds.splice(index, 1);

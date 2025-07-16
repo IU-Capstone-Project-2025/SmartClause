@@ -28,6 +28,7 @@
     
     <DocumentsSidebar
       v-if="selectedSpaceId"
+      ref="documentsSidebar"
       :space-id="selectedSpaceId"
       :documents="documents"
       :uploading-files="uploadingFiles[selectedSpaceId] || []"
@@ -204,7 +205,10 @@ export default {
             await Promise.all(Array.from(files).map(file => api.uploadDocument(currentSpaceId, file)));
         } catch (error) {
             console.error('Error uploading files:', error);
-            // Here you could add more user-facing error handling
+            if (this.$refs.documentsSidebar) {
+              const message = error.response?.data?.error || this.$t('documentsSidebar.uploadError');
+              this.$refs.documentsSidebar.uploadError = message;
+            }
         } finally {
             // Refresh the documents list from the server, but only if we are still in the same space
             if (this.selectedSpaceId === currentSpaceId) {
