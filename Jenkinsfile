@@ -53,12 +53,12 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    def branchName = sh(
-                        returnStdout: true, 
-                        script: 'git rev-parse --abbrev-ref HEAD'
+                    def branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: sh(
+                        returnStdout: true,
+                        script: 'git symbolic-ref --short HEAD || git name-rev --name-only HEAD'
                     ).trim()
                     
-                    if (branchName == 'main') {
+                    if (branchName == 'main' || branchName == 'origin/main') {
                         echo "Starting deployment stage on Jenkins side (branch: ${branchName})"
                         
                         sshagent(['deploy-key-id']) {
