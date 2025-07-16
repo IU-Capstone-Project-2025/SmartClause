@@ -140,7 +140,7 @@ docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upl
 Once setup is complete, access these URLs:
 
 - **🌐 Web Application**: [http://localhost:8080](http://localhost:8080) - Main user interface
-- **📋 Backend API**: [http://localhost:8000](http://localhost:8000) - Main API Gateway (includes documents and chat)
+- **📋 Backend API**: [http://localhost:8000](http://localhost:8000) - Main API Gateway
 - **🔍 AI Analysis API**: [http://localhost:8001](http://localhost:8001) - RAG and analysis API
 - **💬 Chat API**: [http://localhost:8002](http://localhost:8002) - Legal consultation API
 - **📚 API Documentation**: 
@@ -150,7 +150,7 @@ Once setup is complete, access these URLs:
 
 **🎉 You're ready to analyze legal documents!**
 
-## 🖥️ User Interface
+## 🖥️ System Architecture
 
 The platform provides a complete web interface with three main screens:
 
@@ -206,179 +206,60 @@ python analyzer/scripts/download_datasets.py
 
 ## 📚 API Documentation
 
-All primary user-facing endpoints are managed through the **Backend API (Spring Boot)** running on port 8000. The Analyzer and Chat services provide specialized AI functionalities and can also be accessed directly on their respective ports. Authentication is handled via JWT tokens passed in an `smartclause_token` HTTP-only cookie.
+Comprehensive API documentation is available in the `docs/` folder:
 
-### Backend API (Port 8000)
+- **[API Overview](docs/README.md)**: Complete guide to all services and endpoints
+- **[Backend API](docs/backend-api.md)**: Main Spring Boot API Gateway documentation
+- **[Analyzer API](docs/analyzer-api.md)**: AI analysis and retrieval service
+- **[Chat API](docs/chat-api.md)**: Legal consultation and conversation management
+- **[Authentication Guide](docs/authentication.md)**: JWT implementation and security
+- **[Getting Started](docs/getting-started.md)**: Quick start guide for developers
+- **[Error Handling](docs/error-handling.md)**: Comprehensive error scenarios and recovery
 
-#### 🔐 Authentication (`/api/auth`)
-- **`POST /register`**: Register a new user account.
-- **`POST /login`**: Authenticate a user and receive a JWT token in an HTTP-only cookie.
-- **`POST /logout`**: Clear the authentication cookie to log the user out.
-- **`GET /profile`**: Get the current authenticated user's profile information.
-- **`PUT /profile`**: Update the current user's profile.
-- **`PUT /change-password`**: Change the current user's password.
-- **`DELETE /account`**: Deactivate the current user's account.
+Interactive API documentation is also available via Swagger UI:
+- **Backend API**: [http://localhost:8000/swagger-ui/index.html](http://localhost:8000/swagger-ui/index.html)
+- **Analyzer API**: [http://localhost:8001/docs](http://localhost:8001/docs)
+- **Chat API**: [http://localhost:8002/docs](http://localhost:8002/docs)
 
-#### 📁 Document & Space Management (`/api/spaces`, `/api/documents`)
-- **`POST /api/spaces`**: Create a new document workspace.
-- **`GET /api/spaces`**: List all workspaces for the authenticated user.
-- **`POST /api/spaces/{spaceId}/documents`**: Upload a document to a specific workspace.
-- **`GET /api/spaces/{spaceId}/documents`**: Get all documents within a workspace.
-- **`GET /api/documents/{documentId}/analysis`**: Retrieve the analysis results for a specific document.
-
-#### 💬 Chat Integration (Proxied to Chat Service)
-- **`GET /api/spaces/{spaceId}/messages`**: Get chat history for a workspace.
-- **`POST /api/spaces/{spaceId}/messages`**: Send a message and get an AI response.
-- **`GET /api/spaces/{spaceId}/session`**: Get chat session information for a workspace.
-- **`PUT /api/spaces/{spaceId}/session/memory`**: Update the conversation memory length for a session.
-
-### 🔍 Analyzer API (Port 8001)
-The Analyzer service handles the core RAG and AI analysis tasks.
-- **`GET /health`**: Health check with database connectivity status.
-- **`POST /api/v1/retrieve-chunk`**: Semantic document chunk retrieval.
-- **`POST /api/v1/retrieve-rules`**: Semantic retrieval of unique legal rules.
-- **`POST /api/v1/analyze`**: Legal document analysis with risk assessment.
-- **`POST /api/v1/embed`**: Text embedding generation.
-- **`GET /api/v1/metrics/retrieval`**: Embedding quality metrics.
-
-### 💬 Chat API (Port 8002)
-The Chat service manages conversations, memory, and LLM interactions. It is typically accessed via the Backend API Gateway but can be called directly.
-- **`GET /health`**: Health check for the chat service and its dependencies.
-- **`GET /api/v1/spaces/{space_id}/messages`**: Get paginated chat messages for a space.
-- **`POST /api/v1/spaces/{space_id}/messages`**: Send a message to a space and get an AI-generated response.
-- **`GET /api/v1/spaces/{space_id}/session`**: Retrieve session information, including memory configuration.
-- **`PUT /api/v1/spaces/{space_id}/session/memory`**: Update the conversation memory length for a session.
-
-### API Usage Examples
-
-#### User Registration
-```bash
-curl -X POST "http://localhost:8000/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "password": "strongpassword123",
-    "firstName": "Test",
-    "lastName": "User"
-  }'
-```
-
-#### User Login
-```bash
-# The JWT token will be returned in an HTTP-only cookie
-curl -X POST "http://localhost:8000/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "strongpassword123"
-  }'
-```
-
-#### Semantic Search
-```bash
-# Assumes you have a valid cookie from logging in
-curl -X POST "http://localhost:8001/api/v1/retrieve-rules" \
-  -H "Content-Type: application/json" \
-  --cookie "smartclause_token=your_jwt_token_here" \
-  -d '{
-    "query": "contract termination conditions",
-    "k": 5,
-    "distance_function": "cosine"
-  }'
-```
-
-#### Document Analysis
-```bash
-# Assumes you have a valid cookie from logging in
-curl -X POST "http://localhost:8001/api/v1/analyze" \
-  -H "Authorization: Bearer your_jwt_token_here" \
-  -F "id=my_contract_123" \
-  -F "file=@contract.txt"
-```
-
-#### Legal Chat (via Backend Gateway)
-```bash
-# Assumes you have a valid cookie from logging in
-curl -X POST "http://localhost:8000/api/spaces/your_space_id/messages" \
-  -H "Content-Type: application/json" \
-  --cookie "smartclause_token=your_jwt_token_here" \
-  -d '{
-    "message": "What are the key risks in this document?"
-  }'
-```
-
-## 🔧 Advanced Configuration
+## 🔧 Configuration
 
 ### Environment Variables
 
-The environment files support these configuration options:
+The environment files support these key configuration options:
 
-### Analyzer Service (`analyzer/.env`)
-
-**Required:**
+#### Analyzer Service (`analyzer/.env`)
 ```bash
+# Required
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-```
+JWT_SECRET=your_jwt_secret_here
 
-**Database (pre-configured for Docker):**
-```bash
-POSTGRES_DB=smartclause_analyzer
-POSTGRES_USER=smartclause
-POSTGRES_PASSWORD=smartclause
-DATABASE_URL=postgresql://smartclause:smartclause@postgres:5432/smartclause_analyzer
-```
-
-**Model Configuration:**
-```bash
-OPENROUTER_MODEL=google/gemini-2.5-flash-lite-preview-06-17  # Default LLM
-EMBEDDING_MODEL=BAAI/bge-m3                                   # Default embeddings
+# Model Configuration
+OPENROUTER_MODEL=google/gemini-2.5-flash-lite-preview-06-17
+EMBEDDING_MODEL=BAAI/bge-m3
 EMBEDDING_DIMENSION=1024
-```
 
-**Performance Settings:**
-```bash
+# Performance Settings
 MAX_FILE_SIZE=10485760              # 10MB file upload limit
 DEFAULT_K=5                         # Default retrieval count
 MAX_K=20                           # Maximum retrieval count
-MAX_CONCURRENT_THREADS=4           # Concurrent operations
-MAX_CONCURRENT_LLM_CALLS=10        # Concurrent LLM calls
-MAX_CONCURRENT_EMBEDDINGS=8        # Concurrent embedding generation
-```
-
-**Timeout and Retry Settings:**
-```bash
 LLM_TIMEOUT=90                     # LLM API timeout (seconds)
-EMBEDDING_TIMEOUT=15               # Embedding timeout (seconds)
 MAX_RETRIES=3                      # Retry attempts
-RETRY_DELAY=1.0                    # Initial retry delay
-RETRY_BACKOFF_FACTOR=2.0           # Exponential backoff
 ```
 
-### Chat Service (`chat/.env`)
-
-**Required:**
+#### Chat Service (`chat/.env`)
 ```bash
+# Required
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-```
+JWT_SECRET=your_jwt_secret_here
 
-**Database (pre-configured for Docker):**
-```bash
-DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/chatdb
-```
+# LLM Configuration
+LLM_MODEL=google/gemini-2.5-flash-lite-preview-06-17
+LLM_TEMPERATURE=0.7                 # Response creativity (0.0-1.0)
+LLM_MAX_TOKENS=2000                # Maximum response length
 
-**LLM Configuration:**
-```bash
-LLM_MODEL=google/gemini-2.5-flash-lite-preview-06-17  # Default LLM model
-LLM_TEMPERATURE=0.7                                   # Response creativity (0.0-1.0)
-LLM_MAX_TOKENS=2000                                  # Maximum response length
-```
-
-**Chat Settings:**
-```bash
-MAX_MEMORY_MESSAGES=20          # Maximum conversation context
-DEFAULT_MEMORY_MESSAGES=10      # Default conversation context
-ANALYZER_BASE_URL=http://analyzer:8001/api/v1  # Analyzer service URL
+# Chat Settings
+MAX_MEMORY_MESSAGES=20             # Maximum conversation context
+DEFAULT_MEMORY_MESSAGES=10         # Default conversation context
 ```
 
 ### Dataset Processing Options
@@ -386,17 +267,14 @@ ANALYZER_BASE_URL=http://analyzer:8001/api/v1  # Analyzer service URL
 The unified script `process_and_upload_datasets.py` provides flexible options:
 
 ```bash
-# Upload existing embeddings (if file exists)
+# Upload existing embeddings (recommended)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear
 
-# Generate embeddings from scratch (takes 1-2 hours)
+# Generate embeddings from scratch (takes ~1 hour)
 docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --upload --clear
 
-# Batch processing with custom batch size
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --generate --batch-size 50
-
-# Non-interactive mode (skip confirmations)
-docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --no-confirm
+# For systems with limited RAM
+docker-compose exec analyzer python scripts/process_and_upload_datasets.py --upload --clear --csv-chunk-size 50
 ```
 
 ## 🚧 Troubleshooting
@@ -539,38 +417,29 @@ The platform includes a comprehensive chunked Civil Code dataset:
 3. **Embedding Generation**: Each chunk encoded using BAAI/bge-m3 model with batch processing
 4. **Database Upload**: Rules and chunks stored with proper foreign key relationships and indexing
 
-## 📊 MVP Implementation Status
+## 🎯 Project Status
 
-### ✅ Completed and Ready
-- **🌐 Full Web Application** with complete UI workflow and responsive design
-- **📄 Document Upload & Analysis** with comprehensive file processing pipeline
-- **💬 Interactive Legal Chat** with AI consultation, conversation memory, and document context
-- **🗄️ Chunked Vector Database** with 413,000+ text chunks and embeddings
-- **🔍 Semantic Search** with configurable similarity functions and chunk-level precision
-- **🚪 API Gateway Architecture** with unified backend for all microservices
-- **🔗 REST API** with comprehensive endpoints and interactive Swagger documentation
-- **🐳 Docker Deployment** with full service orchestration and easy setup
-- **⚡ Real-time Processing** with status updates and progress tracking
-- **🛡️ Error Handling** with comprehensive validation and user feedback
-- **🔧 Unified Data Processing** with flexible embedding generation and upload scripts
-- **📈 Performance Optimization** with concurrent processing and retry mechanisms
-- **🌐 Web Deployment** via [SmartClause](http://82.202.138.178:8080/)
+### ✅ Current Features
+- **🔐 User Authentication**: Complete JWT-based authentication system with secure registration and login
+- **🌐 Web Application**: Full-featured Vue.js interface with upload, processing, results, and chat screens
+- **📄 Document Analysis**: AI-powered legal document analysis with risk assessment and recommendations
+- **💬 Interactive Chat**: Legal consultation with conversation memory and document-aware responses
+- **🔍 Semantic Search**: Vector-based search through 413,000+ legal text chunks with BGE-M3 embeddings
+- **🏗️ Microservices Architecture**: Spring Boot backend, FastAPI analyzer and chat services
+- **🗄️ Vector Database**: PostgreSQL with pgvector extension for similarity search
+- **🐳 Docker Deployment**: Complete containerization with Docker Compose orchestration
+- **📚 Comprehensive Documentation**: Complete API docs and setup guides
 
-### 🎯 Future Enhancements
-- **👤 User Management**: Authentication system and personalized document history
-- **📱 Mobile App**: Native mobile application for on-the-go legal consultation
+### 🔍 Legal Knowledge Base
+- **190,846 legal rules** from Russian Civil Code with complete metadata
+- **413,453 text chunks** with BAAI/bge-m3 embeddings for semantic search
+- **Structured relationships** between rules and chunks for precise retrieval
+- **Optimized chunking** with 800-character chunks and 500-character overlap
 
-## 🚀 Ready for Production
+### 🛠️ Technology Highlights
+- **AI Integration**: Google Gemini 2.5 Flash via OpenRouter for analysis and chat
+- **Vector Embeddings**: BAAI/bge-m3 sentence transformers (1024 dimensions)
+- **Scalable Architecture**: RESTful microservices with API gateway pattern
+- **Production Ready**: Comprehensive error handling, validation, and security measures
 
-This MVP provides a solid foundation for a legal tech platform with:
-
-- **🏗️ Scalable Architecture**: Microservices with API gateway ready for horizontal scaling and load balancing
-- **💬 AI-Powered Consultation**: Interactive chat with legal context, document analysis integration, and conversation memory
-- **🔒 Production APIs**: Comprehensive error handling, validation, and security measures
-- **⚖️ Legal Domain Expertise**: Purpose-built for Russian legal document analysis with chunk-level precision
-- **🛠️ Modern Tech Stack**: Latest frameworks, AI integration patterns, and best practices
-- **🐳 Container Deployment**: Consistent environments across development, staging, and production
-- **🎯 Optimized Vector Search**: Chunk-based retrieval for improved relevance and performance
-- **📚 Comprehensive Documentation**: Complete setup guides, API docs, and troubleshooting
-
-**🎉 Start analyzing legal documents and get AI legal consultation today!** Upload your first document and chat with our AI legal assistant at [http://localhost:8080](http://localhost:8080) after following the Quick Start guide.
+**🚀 Ready to Use**: Follow the Quick Start guide to set up your local instance and start analyzing legal documents at [http://localhost:8080](http://localhost:8080)!
