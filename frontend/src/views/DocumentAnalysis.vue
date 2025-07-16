@@ -12,9 +12,10 @@
       <div class="results-header">
         <h2>Analysis Results</h2>
         <div class="header-controls">
-          <button class="export-button" @click="exportAnalysis" title="Export analysis">
-            <DownloadIcon class="export-icon" />
-            <span>Export</span>
+          <button class="export-button" @click="exportAnalysis" :disabled="isExporting" title="Export analysis">
+            <div v-if="isExporting" class="button-spinner"></div>
+            <DownloadIcon v-else class="export-icon" />
+            <span>{{ isExporting ? 'Exporting...' : 'Export' }}</span>
           </button>
           <button class="chat-button" @click="goToChat">
             <MessageCircleIcon class="chat-icon" />
@@ -70,6 +71,7 @@ export default {
       totalIssues: 0,
       isLoading: true,
       error: null,
+      isExporting: false,
     };
   },
   async created() {
@@ -102,6 +104,8 @@ export default {
       }
     },
     async exportAnalysis() {
+      if (this.isExporting) return;
+      this.isExporting = true;
       try {
         const documentId = this.$route.params.documentId;
         const response = await api.exportAnalysis(documentId);
@@ -131,6 +135,8 @@ export default {
       } catch (error) {
         console.error('Error exporting analysis:', error);
         // Here you could add a user-facing error notification
+      } finally {
+        this.isExporting = false;
       }
     },
     goToChat() {
@@ -203,6 +209,15 @@ export default {
     margin-bottom: 30px;
 }
 
+.button-spinner {
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 0.8s linear infinite;
+}
+
 .header-controls {
   margin-bottom: 20px;
   text-align: right;
@@ -243,7 +258,12 @@ export default {
   margin-right: 10px;
 }
 
-.export-button:hover {
+.export-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.export-button:hover:not(:disabled) {
   background-color: #2f855a;
 }
 
