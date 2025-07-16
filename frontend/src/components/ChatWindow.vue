@@ -7,8 +7,8 @@
       </div>
       <div class="chat-messages" ref="chatMessages">
         <div v-if="!messages.length && !isBotTyping" class="empty-state-chat">
-          <p>No messages yet.</p>
-          <span>Ask a question to start the conversation.</span>
+          <p>{{ $t('chatWindow.noMessages') }}</p>
+          <span>{{ $t('chatWindow.askQuestion') }}</span>
         </div>
         <div v-else v-for="message in messages" :key="message.id" class="message" :class="message.sender">
           <div class="avatar">
@@ -38,19 +38,22 @@
         <textarea
           ref="chatTextarea"
           v-model="newMessage"
-          placeholder="Ask a question about the document..."
+          :placeholder="$t('chatWindow.placeholder')"
           rows="1"
           @input="adjustTextareaHeight"
           @keydown.enter.exact.prevent="sendMessage"
         ></textarea>
-        <button @click="sendMessage" :disabled="!newMessage.trim()" title="Send message">
+        <button @click="sendMessage" :disabled="!newMessage.trim()" :title="$t('chatWindow.sendMessage')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
         </button>
       </div>
+       <div class="disclaimer-text">
+          <p>{{ $t('chatWindow.disclaimer') }}</p>
+      </div>
     </template>
     <div v-else class="empty-state-chat full-height">
-      <p>Select a space</p>
-      <span>or create a new one to begin.</span>
+      <p>{{ $t('chatWindow.selectSpace') }}</p>
+      <span>{{ $t('chatWindow.createNewSpace') }}</span>
     </div>
   </div>
 </template>
@@ -143,6 +146,13 @@ export default {
   flex-direction: column;
   padding: 0;
   min-width: 0;
+}
+
+
+.disclaimer-text {
+    text-align: center;
+    font-size: 12px;
+    color: #a0aec0;
 }
 
 .chat-header {
@@ -251,7 +261,7 @@ export default {
 
 .chat-input {
   display: flex;
-  margin: 20px;
+  margin: 0 20px;
   background-color: #1e293b;
   border-radius: 18px;
   padding: 8px;

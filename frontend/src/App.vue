@@ -7,7 +7,7 @@
       </div>
       <button class="login-button" v-if="showActionButtonInNavBar" @click="handleActionClick">
         <component :is="buttonIcon" :size="20" />
-        {{ buttonText }}
+        {{ $t(buttonText) }}
       </button>
     </header>
     <main class="main-content" :class="{ 'with-navbar': showNavBar }">
@@ -42,7 +42,7 @@ export default {
       return this.$route.name === 'Upload';
     },
     buttonText() {
-      return this.isUserAuthorized ? 'Spaces' : 'Log In';
+      return this.isUserAuthorized ? 'app.spacesButton' : 'app.loginButton';
     },
     buttonIcon() {
       return this.isUserAuthorized ? 'Folder' : 'LogIn';
@@ -58,6 +58,10 @@ export default {
           localStorage.removeItem('access_token');
         }
       }
+    }
+    const savedLanguage = localStorage.getItem('language');
+    if (savedLanguage) {
+      this.$i18n.locale = savedLanguage;
     }
   },
   methods: {

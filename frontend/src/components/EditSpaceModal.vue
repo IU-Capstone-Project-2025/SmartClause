@@ -1,13 +1,13 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
-      <h3>Edit Space</h3>
+      <h3>{{ $t('editSpaceModal.title') }}</h3>
       <form @submit.prevent="submitEdit">
-        <label for="space-name">Space Name</label>
-        <input id="space-name" v-model="editableSpaceName" type="text" required>
+        <label for="space-name">{{ $t('editSpaceModal.nameLabel') }}</label>
+        <input id="space-name" v-model="editableSpaceName" type="text" :placeholder="$t('editSpaceModal.namePlaceholder')" required>
         <div class="modal-actions">
-          <button type="button" class="cancel-btn" @click="$emit('close')">Cancel</button>
-          <button type="submit" class="save-btn">Save</button>
+          <button type="button" class="cancel-btn" @click="$emit('close')">{{ $t('editSpaceModal.cancelButton') }}</button>
+          <button type="submit" class="save-btn">{{ $t('editSpaceModal.saveButton') }}</button>
         </div>
       </form>
     </div>

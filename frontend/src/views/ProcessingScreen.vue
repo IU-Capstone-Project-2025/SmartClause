@@ -1,7 +1,7 @@
 <template>
   <div class="processing-screen">
     <div class="processing-header">
-      <h2>Analyzing your document</h2>
+      <h2>{{ $t('processingScreen.title') }}</h2>
       <div class="file-info-bar">
         <span class="file-name">{{ fileName }}</span>
       </div>
@@ -11,13 +11,13 @@
       <div class="processing-content">
         <p class="status-text">{{ statusText }}</p>
         <div class="progress-wrapper">
-          <p class="progress-label">Analyzing document and preparing recommendations</p>
+          <p class="progress-label">{{ $t('processingScreen.progressLabel') }}</p>
           <div class="progress-bar-container">
             <div class="progress-bar"></div>
           </div>
-          <p class="time-remaining">This may take a few moments</p>
+          <p class="time-remaining">{{ $t('processingScreen.timeRemaining') }}</p>
         </div>
-        <!-- <button class="cancel-button" @click="cancel">Cancel</button> -->
+        <!-- <button class="cancel-button" @click="cancel">{{ $t('processingScreen.cancelButton') }}</button> -->
       </div>
     </div>
   </div>
@@ -32,11 +32,12 @@ export default {
   data() {
     return {
       fileName: '',
-      statusText: 'Processing data... Please wait.'
+      statusText: ''
     };
   },
   created() {
     this.fileName = sessionStorage.getItem('fileName') || 'Unknown file';
+    this.statusText = this.$t('processingScreen.statusProcessing');
   },
   mounted() {
     this.uploadAndProcessFile();
@@ -49,7 +50,7 @@ export default {
         return;
       }
 
-      this.statusText = 'Uploading and analyzing your document...';
+      this.statusText = this.$t('processingScreen.statusUploading');
 
       // Convert base64 string back to file for multipart upload
       const byteCharacters = atob(fileData);
@@ -71,15 +72,22 @@ export default {
         }
       })
         .then(response => {
-          this.statusText = 'Analysis complete. Loading results...';
+          this.statusText = this.$t('processingScreen.statusComplete');
           sessionStorage.setItem('analysisResults', JSON.stringify(response.data));
           this.$router.push({ name: 'Results', query: { fileName: this.fileName } });
         })
         .catch(error => {
           console.error('Processing failed:', error);
-          this.statusText = 'An error occurred during processing. Please try again.';
-          // Optionally, redirect back to upload screen after a delay
           setTimeout(() => this.$router.push('/'), 2000);
+          let errorMessage = this.$t('processingScreen.statusError');
+          if (error.response && error.response.data && error.response.data.detail) {
+            errorMessage = `${errorMessage}: ${error.response.data.detail}`;
+          } else if (error.response && error.response.data && error.response.data.error) {
+            errorMessage = `${errorMessage}: ${error.response.data.error}`;
+          } else if (error.response && error.response.data && error.response.data.message) {
+            errorMessage = `${errorMessage}: ${error.response.data.message}`;
+          }
+          this.statusText = errorMessage;
         });
     },
     cancel() {

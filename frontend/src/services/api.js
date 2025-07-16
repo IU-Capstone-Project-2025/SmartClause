@@ -33,4 +33,8 @@ export const exportAnalysis = (documentId) => apiClient.get(`/documents/${docume
 
 // Messages API
 export const getMessages = (spaceId) => apiClient.get(`/spaces/${spaceId}/messages`);
-export const sendMessage = (spaceId, message) => apiClient.post(`/spaces/${spaceId}/messages`, message); 
+export const sendMessage = (spaceId, message) => apiClient.post(`/spaces/${spaceId}/messages`, message);
+
+// Auth API
+export const logout = () => apiClient.post('/auth/logout');
+export const getProfile = () => apiClient.get('/auth/profile'); 
