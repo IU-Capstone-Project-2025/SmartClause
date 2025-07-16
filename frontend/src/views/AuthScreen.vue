@@ -3,8 +3,8 @@
     <div class="auth-container">
       <div class="auth-box">
         <div class="auth-header">
-          <h2 class="title">{{ isLogin ? 'Welcome Back' : 'Create Account' }}</h2>
-          <p class="subtitle">{{ isLogin ? 'Login to continue' : 'Join us to secure your deals' }}</p>
+          <h2 class="title">{{ isLogin ? $t('authScreen.welcomeBack') : $t('authScreen.createAccount') }}</h2>
+          <p class="subtitle">{{ isLogin ? $t('authScreen.loginToContinue') : $t('authScreen.joinUs') }}</p>
         </div>
 
         <div v-if="error" class="error-message">
@@ -14,47 +14,47 @@
         <form @submit.prevent="handleSubmit">
           <div v-if="!isLogin" class="form-grid">
             <div class="form-group">
-              <label for="firstname">First Name</label>
-              <input type="text" id="firstname" v-model="form.first_name" required placeholder="Enter your first name">
+              <label for="firstname">{{ $t('authScreen.firstName') }}</label>
+              <input type="text" id="firstname" v-model="form.first_name" required :placeholder="$t('authScreen.firstNamePlaceholder')">
             </div>
             <div class="form-group">
-              <label for="lastname">Last Name</label>
-              <input type="text" id="lastname" v-model="form.last_name" required placeholder="Enter your last name">
+              <label for="lastname">{{ $t('authScreen.lastName') }}</label>
+              <input type="text" id="lastname" v-model="form.last_name" required :placeholder="$t('authScreen.lastNamePlaceholder')">
             </div>
           </div>
 
           <div class="form-group" v-if="!isLogin">
-            <label for="username">Username</label>
-            <input type="text" id="username" v-model="form.username" required placeholder="Choose a username">
+            <label for="username">{{ $t('authScreen.username') }}</label>
+            <input type="text" id="username" v-model="form.username" required :placeholder="$t('authScreen.usernamePlaceholder')">
           </div>
 
           <div class="form-group">
-            <label for="email">{{ isLogin ? 'Email or Username' : 'Email' }}</label>
-            <input type="text" id="email" v-model="form.username_or_email" required :placeholder="isLogin ? 'Enter your email or username' : 'Enter your email'">
+            <label for="email">{{ isLogin ? $t('authScreen.emailOrUsername') : $t('authScreen.email') }}</label>
+            <input type="text" id="email" v-model="form.username_or_email" required :placeholder="isLogin ? $t('authScreen.emailOrUsernamePlaceholder') : $t('authScreen.emailPlaceholder')">
           </div>
 
           <div class="form-group">
-            <label for="password">Password</label>
+            <label for="password">{{ $t('authScreen.password') }}</label>
             <div class="password-input-wrapper">
-              <input :type="showPassword ? 'text' : 'password'" id="password" v-model="form.password" required :minlength="isLogin ? null : 6" placeholder="Enter your password">
+              <input :type="showPassword ? 'text' : 'password'" id="password" v-model="form.password" required :minlength="isLogin ? null : 6" :placeholder="$t('authScreen.passwordPlaceholder')">
               <button type="button" class="toggle-password-visibility" @click="togglePasswordVisibility">
                 <i :class="showPassword ? 'far fa-eye' : 'far fa-eye-slash'"></i>
               </button>
             </div>
-            <p v-if="!isLogin" class="password-hint">Must be at least 6 characters.</p>
+            <p v-if="!isLogin" class="password-hint">{{ $t('authScreen.passwordHint') }}</p>
           </div>
 
           <div class="form-actions">
             <button type="submit" class="auth-button">
-              {{ isLogin ? 'Login' : 'Create Account' }}
+              {{ isLogin ? $t('authScreen.loginButton') : $t('authScreen.createAccountButton') }}
             </button>
           </div>
         </form>
 
         <div class="switch-auth">
           <p>
-            {{ isLogin ? "Don't have an account?" : "Already have an account?" }}
-            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? 'Sign Up' : 'Log In' }}</a>
+            {{ isLogin ? $t('authScreen.noAccount') : $t('authScreen.haveAccount') }}
+            <a href="#" @click.prevent="toggleAuthMode">{{ isLogin ? $t('authScreen.signUp') : $t('authScreen.logIn') }}</a>
           </p>
         </div>
       </div>
@@ -111,7 +111,7 @@ export default {
           this.$router.replace(redirectPath);
         } else {
           if (this.form.password.length < 6) {
-            this.error = 'Password must be at least 6 characters long.';
+            this.error = this.$t('authScreen.passwordLengthError');
             return;
           }
           await axios.post('/api/auth/register', {
@@ -127,7 +127,7 @@ export default {
         if (error.response && error.response.data && error.response.data.detail) {
             this.error = error.response.data.detail;
         } else {
-            this.error = 'An unexpected error occurred. Please try again.';
+            this.error = this.$t('authScreen.unexpectedError');
         }
         console.error('Authentication error:', error.response ? error.response.data : error.message);
       }

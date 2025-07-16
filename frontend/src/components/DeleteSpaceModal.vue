@@ -1,11 +1,13 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
-      <h3>Delete Space</h3>
-      <p>Are you sure you want to delete the space "<strong>{{ space.name }}</strong>"? This action cannot be undone.</p>
+      <h3>{{ $t('deleteSpaceModal.title') }}</h3>
+      <p>
+        {{ $t('deleteSpaceModal.confirmation', { spaceName: space.name }) }}
+      </p>
       <div class="modal-actions">
-        <button class="cancel-btn" @click="$emit('close')">Cancel</button>
-        <button class="delete-btn" @click="$emit('confirm')">Delete</button>
+        <button class="cancel-btn" @click="$emit('close')">{{ $t('deleteSpaceModal.cancelButton') }}</button>
+        <button class="delete-btn" @click="$emit('confirm')">{{ $t('deleteSpaceModal.deleteButton') }}</button>
       </div>
     </div>
   </div>

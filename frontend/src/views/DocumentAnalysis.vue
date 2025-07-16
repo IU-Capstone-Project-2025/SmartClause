@@ -2,30 +2,31 @@
   <div class="results-screen">
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <p>Analyzing document...</p>
+      <p>{{ $t('documentAnalysis.loading') }}</p>
     </div>
     <div v-else-if="error" class="error-state">
-      <p>Error loading analysis results.</p>
+      <p>{{ $t('documentAnalysis.error') }}</p>
       <p>{{ error }}</p>
     </div>
     <div v-else>
       <div class="results-header">
-        <h2>Analysis Results</h2>
+        <h2>{{ $t('resultsScreen.title') }}</h2>
         <div class="header-controls">
-          <button class="export-button" @click="exportAnalysis" title="Export analysis">
-            <DownloadIcon class="export-icon" />
-            <span>Export</span>
+          <button class="export-button" @click="exportAnalysis" :disabled="isExporting" :title="$t('documentAnalysis.exportAnalysisTitle')">
+            <div v-if="isExporting" class="button-spinner"></div>
+            <DownloadIcon v-else class="export-icon" />
+            <span>{{ isExporting ? $t('documentAnalysis.exporting') : $t('documentAnalysis.export') }}</span>
           </button>
           <button class="chat-button" @click="goToChat">
             <MessageCircleIcon class="chat-icon" />
-            <span>Ask a question about the document</span>
+            <span>{{ $t('resultsScreen.askQuestion') }}</span>
           </button>
         </div>
         <div class="file-info-bar">
           <span class="file-name">{{ fileName }}</span>
           <div class="status">
             <span class="status-dot"></span>
-            <span>Issues found: {{ totalIssues }}</span>
+            <span>{{ $t('resultsScreen.issuesFound', { count: totalIssues }) }}</span>
           </div>
         </div>
       </div>
@@ -40,10 +41,10 @@
           </div>
           <div v-if="activeIndex === index" class="result-content">
             <div v-for="(analysis, analysisIndex) in result.analysis_points" :key="analysisIndex" class="analysis-item">
-              <h4>Issue {{ analysisIndex + 1 }}</h4>
-              <p><strong>Cause:</strong> {{ analysis.cause }}</p>
-              <p><strong>Risk:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
-              <p><strong>Recommendation:</strong> {{ analysis.recommendation }}</p>
+              <h4>{{ $t('resultsScreen.issue') }} {{ analysisIndex + 1 }}</h4>
+              <p><strong>{{ $t('resultsScreen.cause') }}:</strong> {{ analysis.cause }}</p>
+              <p><strong>{{ $t('resultsScreen.risk') }}:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
+              <p><strong>{{ $t('resultsScreen.recommendation') }}:</strong> {{ analysis.recommendation }}</p>
             </div>
           </div>
         </div>
@@ -70,6 +71,7 @@ export default {
       totalIssues: 0,
       isLoading: true,
       error: null,
+      isExporting: false,
     };
   },
   async created() {
@@ -102,6 +104,8 @@ export default {
       }
     },
     async exportAnalysis() {
+      if (this.isExporting) return;
+      this.isExporting = true;
       try {
         const documentId = this.$route.params.documentId;
         const response = await api.exportAnalysis(documentId);
@@ -130,7 +134,8 @@ export default {
         window.URL.revokeObjectURL(url);
       } catch (error) {
         console.error('Error exporting analysis:', error);
-        // Here you could add a user-facing error notification
+      } finally {
+        this.isExporting = false;
       }
     },
     goToChat() {
@@ -203,6 +208,15 @@ export default {
     margin-bottom: 30px;
 }
 
+.button-spinner {
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 0.8s linear infinite;
+}
+
 .header-controls {
   margin-bottom: 20px;
   text-align: right;
@@ -243,7 +257,12 @@ export default {
   margin-right: 10px;
 }
 
-.export-button:hover {
+.export-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.export-button:hover:not(:disabled) {
   background-color: #2f855a;
 }
 

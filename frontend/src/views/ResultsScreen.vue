@@ -1,18 +1,18 @@
 <template>
   <div class="results-screen">
     <div class="results-header">
-      <h2>Analysis Results</h2>
+      <h2>{{ $t('resultsScreen.title') }}</h2>
       <div class="header-controls">
         <button class="chat-button" @click="goToChat">
           <MessageCircleIcon class="chat-icon" />
-          <span>Ask a question about the document</span>
+          <span>{{ $t('resultsScreen.askQuestion') }}</span>
         </button>
       </div>
       <div class="file-info-bar">
         <span class="file-name">{{ fileName }}</span>
         <div class="status">
           <span class="status-dot"></span>
-          <span>Issues found: {{ totalIssues }}</span>
+          <span>{{ $t('resultsScreen.issuesFound', { count: totalIssues }) }}</span>
         </div>
       </div>
     </div>
@@ -27,10 +27,10 @@
         </div>
         <div v-if="activeIndex === index" class="result-content">
           <div v-for="(analysis, analysisIndex) in result.analysis_points" :key="analysisIndex" class="analysis-item">
-            <h4>Issue {{ analysisIndex + 1 }}</h4>
-            <p><strong>Cause:</strong> {{ analysis.cause }}</p>
-            <p><strong>Risk:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
-            <p><strong>Recommendation:</strong> {{ analysis.recommendation }}</p>
+            <h4>{{ $t('resultsScreen.issue') }} {{ analysisIndex + 1 }}</h4>
+            <p><strong>{{ $t('resultsScreen.cause') }}:</strong> {{ analysis.cause }}</p>
+            <p><strong>{{ $t('resultsScreen.risk') }}:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
+            <p><strong>{{ $t('resultsScreen.recommendation') }}:</strong> {{ analysis.recommendation }}</p>
           </div>
         </div>
       </div>
@@ -85,13 +85,13 @@ export default {
     getRiskClass(risk) {
         if (!risk) return '';
         const riskLowerCase = risk.toLowerCase();
-        if (riskLowerCase.includes('высокий')) {
+        if (riskLowerCase.includes('высокий') || riskLowerCase.includes('high')) {
             return 'risk-high';
         }
-        if (riskLowerCase.includes('средний')) {
+        if (riskLowerCase.includes('средний') || riskLowerCase.includes('medium')) {
             return 'risk-medium';
         }
-        if (riskLowerCase.includes('низкий')) {
+        if (riskLowerCase.includes('низкий') || riskLowerCase.includes('low')) {
             return 'risk-low';
         }
         return '';
@@ -250,6 +250,18 @@ export default {
 .risk-low {
     color: #38a169;
     font-weight: bold;
+}
+
+.risk-high::after {
+    content: " ({{ $t('resultsScreen.riskHigh') }})";
+}
+
+.risk-medium::after {
+    content: " ({{ $t('resultsScreen.riskMedium') }})";
+}
+
+.risk-low::after {
+    content: " ({{ $t('resultsScreen.riskLow') }})";
 }
 
 .result-content p {

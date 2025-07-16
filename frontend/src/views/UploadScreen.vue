@@ -2,22 +2,22 @@
   <div class="upload-screen">
     <div class="main-content">
       <div class="header">
-        <h1 class="title">Secure deals start here</h1>
-        <p class="subtitle">Upload a contract, and our AI assistant will identify risks and suggest improvements.</p>
+        <h1 class="title">{{ $t('uploadScreen.title') }}</h1>
+        <p class="subtitle">{{ $t('uploadScreen.subtitle') }}</p>
       </div>
       <div class="upload-box-wrapper">
         <div v-if="isAuthorized" class="authorized-suggestion">
-          <p>You are logged in. You can upload documents to your spaces.</p>
-          <button class="spaces-button" @click="goToSpaces">Go to Spaces</button>
+          <p>{{ $t('uploadScreen.loggedInSuggestion') }}</p>
+          <button class="spaces-button" @click="goToSpaces">{{ $t('uploadScreen.goToSpaces') }}</button>
         </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleFileDrop" v-if="!isAuthorized">
           <div class="upload-content">
-            <p>Drag and drop your document here or select a file</p>
+            <p>{{ $t('uploadScreen.dragAndDrop') }}</p>
             <button class="upload-button" @click="triggerFileInput">
               <Upload :size="20" />
-              Select File
+              {{ $t('uploadScreen.selectFile') }}
             </button>
-            <p class="formats">Supported formats: .docx, .pdf</p>
+            <p class="formats">{{ $t('uploadScreen.supportedFormats') }}</p>
           </div>
           <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none;" accept=".docx,.pdf">
         </div>
@@ -26,13 +26,13 @@
     </div>
     <div class="side-content">
       <div class="info-card">
-        <p>We find hidden risks and check for legal compliance.</p>
+        <p>{{ $t('uploadScreen.risksInfo') }}</p>
         <div class="icon">
           <FileText :size="24" />
         </div>
       </div>
       <div class="info-card">
-        <p>We provide clear recommendations for improving each clause of the contract.</p>
+        <p>{{ $t('uploadScreen.recommendationsInfo') }}</p>
         <div class="icon">
           <Lightbulb :size="24" />
         </div>
@@ -82,7 +82,7 @@ export default {
       this.uploadError = null;
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        this.uploadError = 'File is too large. The maximum file size is 10MB.';
+        this.uploadError = this.$t('uploadScreen.fileTooLargeError');
         if (this.$refs.fileInput) {
           this.$refs.fileInput.value = '';
         }
