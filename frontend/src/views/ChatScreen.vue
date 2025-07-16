@@ -1,11 +1,11 @@
 <template>
   <div class="chat-screen">
-    <button v-if="isSpacesSidebarCollapsed" @click="toggleSpacesSidebar" class="expand-btn left" title="Open sidebar">
+    <button v-if="isSpacesSidebarCollapsed" @click="toggleSpacesSidebar" class="expand-btn left" :title="$t('chatScreen.openSidebar')">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.84l8.57 3.91a2 2 0 0 0 1.66 0l8.57-3.91a1 1 0 0 0 0-1.84Z"/><path d="m22 17.65-8.57 3.91a2 2 0 0 1-1.66 0L3.2 17.65"/><path d="m22 12.65-8.57 3.91a2 2 0 0 1-1.66 0L3.2 12.65"/></svg>
     </button>
-     <button v-if="isDocumentsSidebarCollapsed && selectedSpaceId" @click="toggleDocumentsSidebar" class="expand-btn right upload-btn" title="Open sidebar">
+     <button v-if="isDocumentsSidebarCollapsed && selectedSpaceId" @click="toggleDocumentsSidebar" class="expand-btn right upload-btn" :title="$t('chatScreen.openSidebar')">
        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-       Upload
+       {{ $t('chatScreen.upload') }}
     </button>
 
     <SpacesSidebar 

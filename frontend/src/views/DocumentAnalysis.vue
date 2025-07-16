@@ -2,31 +2,31 @@
   <div class="results-screen">
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <p>Analyzing document...</p>
+      <p>{{ $t('documentAnalysis.loading') }}</p>
     </div>
     <div v-else-if="error" class="error-state">
-      <p>Error loading analysis results.</p>
+      <p>{{ $t('documentAnalysis.error') }}</p>
       <p>{{ error }}</p>
     </div>
     <div v-else>
       <div class="results-header">
-        <h2>Analysis Results</h2>
+        <h2>{{ $t('resultsScreen.title') }}</h2>
         <div class="header-controls">
           <button class="export-button" @click="exportAnalysis" :disabled="isExporting" title="Export analysis">
             <div v-if="isExporting" class="button-spinner"></div>
             <DownloadIcon v-else class="export-icon" />
-            <span>{{ isExporting ? 'Exporting...' : 'Export' }}</span>
+            <span>{{ isExporting ? $t('documentAnalysis.exporting') : $t('documentAnalysis.export') }}</span>
           </button>
           <button class="chat-button" @click="goToChat">
             <MessageCircleIcon class="chat-icon" />
-            <span>Ask a question about the document</span>
+            <span>{{ $t('resultsScreen.askQuestion') }}</span>
           </button>
         </div>
         <div class="file-info-bar">
           <span class="file-name">{{ fileName }}</span>
           <div class="status">
             <span class="status-dot"></span>
-            <span>Issues found: {{ totalIssues }}</span>
+            <span>{{ $t('resultsScreen.issuesFound', { count: totalIssues }) }}</span>
           </div>
         </div>
       </div>
@@ -41,10 +41,10 @@
           </div>
           <div v-if="activeIndex === index" class="result-content">
             <div v-for="(analysis, analysisIndex) in result.analysis_points" :key="analysisIndex" class="analysis-item">
-              <h4>Issue {{ analysisIndex + 1 }}</h4>
-              <p><strong>Cause:</strong> {{ analysis.cause }}</p>
-              <p><strong>Risk:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
-              <p><strong>Recommendation:</strong> {{ analysis.recommendation }}</p>
+              <h4>{{ $t('resultsScreen.issue') }} {{ analysisIndex + 1 }}</h4>
+              <p><strong>{{ $t('resultsScreen.cause') }}:</strong> {{ analysis.cause }}</p>
+              <p><strong>{{ $t('resultsScreen.risk') }}:</strong> <span :class="getRiskClass(analysis.risk)">{{ analysis.risk }}</span></p>
+              <p><strong>{{ $t('resultsScreen.recommendation') }}:</strong> {{ analysis.recommendation }}</p>
             </div>
           </div>
         </div>

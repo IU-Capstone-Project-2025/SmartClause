@@ -1,0 +1,132 @@
+{
+  "app": {
+    "loginButton": "Войти",
+    "spacesButton": "Пространства"
+  },
+  "settingsModal": {
+    "title": "Настройки",
+    "logoutButton": "Выйти из аккаунта",
+    "closeButton": "Закрыть",
+    "languageLabel": "Язык",
+    "english": "Английский",
+    "russian": "Русский"
+  },
+  "chatScreen": {
+    "openSidebar": "Открыть боковую панель",
+    "upload": "Загрузить"
+  },
+  "spacesSidebar": {
+    "title": "Пространства",
+    "newSpace": "Новое пространство",
+    "settings": "Настройки",
+    "noSpaces": "Пространств пока нет",
+    "createSpace": "Создайте новое, чтобы начать работу"
+  },
+  "documentsSidebar": {
+    "title": "Документы",
+    "uploadDocuments": "Загрузить",
+    "noDocuments": "Документов нет",
+    "uploadToStart": "Загрузите файлы, чтобы начать анализ"
+  },
+  "createSpaceModal": {
+    "title": "Создать новое пространство",
+    "nameLabel": "Имя пространства",
+    "namePlaceholder": "Введите имя пространства",
+    "createButton": "Создать",
+    "cancelButton": "Отмена"
+  },
+  "editSpaceModal": {
+    "title": "Редактировать пространство",
+    "nameLabel": "Имя пространства",
+    "namePlaceholder": "Введите имя пространства",
+    "saveButton": "Сохранить",
+    "cancelButton": "Отмена"
+  },
+  "deleteSpaceModal": {
+    "title": "Удалить пространство",
+    "confirmation": "Вы уверены, что хотите удалить это пространство? Это действие необратимо.",
+    "deleteButton": "Удалить",
+    "cancelButton": "Отмена"
+  },
+  "deleteDocumentModal": {
+    "title": "Удалить документ",
+    "confirmation": "Вы уверены, что хотите удалить этот документ?",
+    "deleteButton": "Удалить",
+    "cancelButton": "Отмена"
+  },
+  "chatWindow": {
+    "placeholder": "Введите ваше сообщение...",
+    "disclaimer": "SmartClause может быть неточен. Проверяйте важную информацию.",
+    "noMessages": "Сообщений пока нет",
+    "askQuestion": "Задайте вопрос, чтобы начать диалог",
+    "selectSpace": "Выберите пространство",
+    "createNewSpace": "или создайте новое, чтобы начать"
+  },
+  "uploadScreen": {
+    "title": "Безопасные сделки начинаются здесь",
+    "subtitle": "Загрузите договор, и наш AI-ассистент определит риски и предложит улучшения.",
+    "loggedInSuggestion": "Вы вошли в систему. Вы можете загружать документы в свои пространства.",
+    "goToSpaces": "Перейти к пространствам",
+    "dragAndDrop": "Перетащите документ сюда или выберите файл",
+    "selectFile": "Выбрать файл",
+    "supportedFormats": "Поддерживаемые форматы: .docx, .pdf",
+    "fileTooLargeError": "Файл слишком большой. Максимальный размер файла — 10 МБ.",
+    "risksInfo": "Мы находим скрытые риски и проверяем на соответствие законодательству.",
+    "recommendationsInfo": "Мы предоставляем четкие рекомендации по улучшению каждого пункта договора."
+  },
+  "resultsScreen": {
+    "title": "Результаты анализа",
+    "askQuestion": "Задать вопрос о документе",
+    "issuesFound": "Найдено проблем: {count}",
+    "issue": "Проблема",
+    "cause": "Причина",
+    "risk": "Риск",
+    "recommendation": "Рекомендация",
+    "riskHigh": "Высокий",
+    "riskMedium": "Средний",
+    "riskLow": "Низкий"
+  },
+  "processingScreen": {
+    "title": "Анализ вашего документа",
+    "statusProcessing": "Обработка данных... Пожалуйста, подождите.",
+    "statusUploading": "Загрузка и анализ вашего документа...",
+    "statusComplete": "Анализ завершен. Загрузка результатов...",
+    "statusError": "Во время обработки произошла ошибка. Пожалуйста, попробуйте еще раз.",
+    "progressLabel": "Анализ документа и подготовка рекомендаций",
+    "timeRemaining": "Это может занять несколько минут",
+    "cancelButton": "Отмена"
+  },
+  "documentAnalysis": {
+    "loading": "Анализ документа...",
+    "error": "Ошибка загрузки результатов анализа.",
+    "export": "Экспорт",
+    "exporting": "Экспорт..."
+  },
+  "authScreen": {
+    "welcomeBack": "С возвращением",
+    "createAccount": "Создать аккаунт",
+    "loginToContinue": "Войдите, чтобы продолжить",
+    "joinUs": "Присоединяйтесь, чтобы обезопасить свои сделки",
+    "firstName": "Имя",
+    "firstNamePlaceholder": "Введите ваше имя",
+    "lastName": "Фамилия",
+    "lastNamePlaceholder": "Введите вашу фамилию",
+    "username": "Имя пользователя",
+    "usernamePlaceholder": "Выберите имя пользователя",
+    "emailOrUsername": "Email или имя пользователя",
+    "email": "Email",
+    "emailOrUsernamePlaceholder": "Введите ваш email или имя пользователя",
+    "emailPlaceholder": "Введите ваш email",
+    "password": "Пароль",
+    "passwordPlaceholder": "Введите ваш пароль",
+    "passwordHint": "Пароль должен содержать не менее 6 символов.",
+    "loginButton": "Войти",
+    "createAccountButton": "Создать аккаунт",
+    "noAccount": "Нет аккаунта?",
+    "haveAccount": "Уже есть аккаунт?",
+    "signUp": "Зарегистрироваться",
+    "logIn": "Войти",
+    "passwordLengthError": "Пароль должен содержать не менее 6 символов.",
+    "unexpectedError": "Произошла непредвиденная ошибка. Пожалуйста, попробуйте еще раз."
+  }
+}

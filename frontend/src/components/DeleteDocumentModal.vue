@@ -1,11 +1,13 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
-      <h3>Delete Document</h3>
-      <p>Are you sure you want to delete the document "<strong>{{ document.name }}</strong>"? This action cannot be undone.</p>
+      <h3>{{ $t('deleteDocumentModal.title') }}</h3>
+      <p>
+        {{ $t('deleteDocumentModal.confirmation', { docName: document.name }) }}
+      </p>
       <div class="modal-actions">
-        <button class="cancel-btn" @click="$emit('close')">Cancel</button>
-        <button class="delete-btn" @click="$emit('confirm')">Delete</button>
+        <button class="cancel-btn" @click="$emit('close')">{{ $t('deleteDocumentModal.cancelButton') }}</button>
+        <button class="delete-btn" @click="$emit('confirm')">{{ $t('deleteDocumentModal.deleteButton') }}</button>
       </div>
     </div>
   </div>

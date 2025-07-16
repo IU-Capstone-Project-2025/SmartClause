@@ -8,20 +8,20 @@
     />
     <div class="sidebar-content">
       <div class="documents-header">
-        <h3>Documents</h3>
-        <button @click="$emit('toggle-collapse')" class="sidebar-toggle-btn" title="Collapse sidebar">
+        <h3>{{ $t('documentsSidebar.title') }}</h3>
+        <button @click="$emit('toggle-collapse')" class="sidebar-toggle-btn" :title="$t('documentsSidebar.title')">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg>
         </button>
         <button class="upload-btn" @click="triggerFileUpload">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          <span>Upload</span>
+          <span>{{ $t('documentsSidebar.uploadDocuments') }}</span>
         </button>
         <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none;" multiple accept=".pdf,.docx">
       </div>
       <p v-if="uploadError" class="error-text">{{ uploadError }}</p>
       <div v-if="!documents.length && !uploadingFiles.length" class="empty-state">
-        <p>No documents.</p>
-        <span>Upload files to start analyzing.</span>
+        <p>{{ $t('documentsSidebar.noDocuments') }}</p>
+        <span>{{ $t('documentsSidebar.uploadToStart') }}</span>
       </div>
       <ul class="documents-list" v-else>
         <li v-for="file in uploadingFiles" :key="file.id" class="uploading-item">
@@ -176,7 +176,7 @@ export default {
 
 <style scoped>
 .documents-sidebar {
-  width: 300px;
+  width: 320px;
   border-right: none;
   border-left: 1px solid #1e293b;
   flex-shrink: 0;
@@ -242,7 +242,7 @@ export default {
 .documents-header .upload-btn {
   order: 2;
   margin-left: auto;
-  margin-right: 10px;
+  margin-right: auto;
 }
 
 .upload-btn {

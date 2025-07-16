@@ -1,0 +1,132 @@
+{
+  "app": {
+    "loginButton": "Log In",
+    "spacesButton": "Spaces"
+  },
+  "settingsModal": {
+    "title": "Settings",
+    "logoutButton": "Logout from account",
+    "closeButton": "Close",
+    "languageLabel": "Language",
+    "english": "English",
+    "russian": "Russian"
+  },
+  "chatScreen": {
+    "openSidebar": "Open sidebar",
+    "upload": "Upload"
+  },
+  "spacesSidebar": {
+    "title": "Spaces",
+    "newSpace": "New Space",
+    "settings": "Settings",
+    "noSpaces": "No spaces yet",
+    "createSpace": "Create one to start collaborating"
+  },
+  "documentsSidebar": {
+    "title": "Documents",
+    "uploadDocuments": "Upload",
+    "noDocuments": "No documents",
+    "uploadToStart": "Upload files to start analyzing"
+  },
+  "createSpaceModal": {
+    "title": "Create New Space",
+    "nameLabel": "Space Name",
+    "namePlaceholder": "Enter space name",
+    "createButton": "Create",
+    "cancelButton": "Cancel"
+  },
+  "editSpaceModal": {
+    "title": "Edit Space",
+    "nameLabel": "Space Name",
+    "namePlaceholder": "Enter space name",
+    "saveButton": "Save",
+    "cancelButton": "Cancel"
+  },
+  "deleteSpaceModal": {
+    "title": "Delete Space",
+    "confirmation": "Are you sure you want to delete the space \"{spaceName}\"? This action cannot be undone.",
+    "deleteButton": "Delete",
+    "cancelButton": "Cancel"
+  },
+  "deleteDocumentModal": {
+    "title": "Delete Document",
+    "confirmation": "Are you sure you want to delete the document \"{docName}\"? This action cannot be undone.",
+    "deleteButton": "Delete",
+    "cancelButton": "Cancel"
+  },
+  "chatWindow": {
+    "placeholder": "Type your message here...",
+    "disclaimer": "SmartClause can be inaccurate. Consider checking important information.",
+    "noMessages": "No messages yet",
+    "askQuestion": "Ask a question to start the conversation",
+    "selectSpace": "Select a space",
+    "createNewSpace": "or create a new one to begin"
+  },
+  "uploadScreen": {
+    "title": "Secure deals start here",
+    "subtitle": "Upload a contract, and our AI assistant will identify risks and suggest improvements.",
+    "loggedInSuggestion": "You are logged in. You can upload documents to your spaces.",
+    "goToSpaces": "Go to Spaces",
+    "dragAndDrop": "Drag and drop your document here or select a file",
+    "selectFile": "Select File",
+    "supportedFormats": "Supported formats: .docx, .pdf",
+    "fileTooLargeError": "File is too large. The maximum file size is 10MB.",
+    "risksInfo": "We find hidden risks and check for legal compliance.",
+    "recommendationsInfo": "We provide clear recommendations for improving each clause of the contract."
+  },
+  "resultsScreen": {
+    "title": "Analysis Results",
+    "askQuestion": "Ask a question about the document",
+    "issuesFound": "Issues found: {count}",
+    "issue": "Issue",
+    "cause": "Cause",
+    "risk": "Risk",
+    "recommendation": "Recommendation",
+    "riskHigh": "High",
+    "riskMedium": "Medium",
+    "riskLow": "Low"
+  },
+  "processingScreen": {
+    "title": "Analyzing your document",
+    "statusProcessing": "Processing data... Please wait.",
+    "statusUploading": "Uploading and analyzing your document...",
+    "statusComplete": "Analysis complete. Loading results...",
+    "statusError": "An error occurred during processing. Please try again.",
+    "progressLabel": "Analyzing document and preparing recommendations",
+    "timeRemaining": "This may take a few moments",
+    "cancelButton": "Cancel"
+  },
+  "documentAnalysis": {
+    "loading": "Analyzing document...",
+    "error": "Error loading analysis results.",
+    "export": "Export",
+    "exporting": "Exporting..."
+  },
+  "authScreen": {
+    "welcomeBack": "Welcome Back",
+    "createAccount": "Create Account",
+    "loginToContinue": "Login to continue",
+    "joinUs": "Join us to secure your deals",
+    "firstName": "First Name",
+    "firstNamePlaceholder": "Enter your first name",
+    "lastName": "Last Name",
+    "lastNamePlaceholder": "Enter your last name",
+    "username": "Username",
+    "usernamePlaceholder": "Choose a username",
+    "emailOrUsername": "Email or Username",
+    "email": "Email",
+    "emailOrUsernamePlaceholder": "Enter your email or username",
+    "emailPlaceholder": "Enter your email",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "passwordHint": "Must be at least 6 characters.",
+    "loginButton": "Login",
+    "createAccountButton": "Create Account",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "signUp": "Sign Up",
+    "logIn": "Log In",
+    "passwordLengthError": "Password must be at least 6 characters long.",
+    "unexpectedError": "An unexpected error occurred. Please try again."
+  }
+} 

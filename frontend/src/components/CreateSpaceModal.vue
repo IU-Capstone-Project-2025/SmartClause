@@ -1,15 +1,15 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
-      <h3>Create a New Space</h3>
+      <h3>{{ $t('createSpaceModal.title') }}</h3>
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
-          <label for="spaceName">Space Name</label>
-          <input type="text" id="spaceName" v-model="spaceName" placeholder="e.g., Q4 Project Planning" required>
+          <label for="spaceName">{{ $t('createSpaceModal.nameLabel') }}</label>
+          <input type="text" id="spaceName" v-model="spaceName" :placeholder="$t('createSpaceModal.namePlaceholder')" required>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn-cancel" @click="$emit('close')">Cancel</button>
-          <button type="submit" class="btn-create">Create</button>
+          <button type="button" class="btn-cancel" @click="$emit('close')">{{ $t('createSpaceModal.cancelButton') }}</button>
+          <button type="submit" class="btn-create">{{ $t('createSpaceModal.createButton') }}</button>
         </div>
       </form>
     </div>
