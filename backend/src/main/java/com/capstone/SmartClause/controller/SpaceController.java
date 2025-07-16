@@ -61,7 +61,7 @@ public class SpaceController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve spaces"));
+                .body(Map.of("error", "Failed to retrieve spaces: " + e.getMessage()));
         }
     }
 
@@ -98,7 +98,7 @@ public class SpaceController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to create space"));
+                .body(Map.of("error", "Failed to create space: " + e.getMessage()));
         }
     }
 
@@ -136,7 +136,7 @@ public class SpaceController {
                 .body(Map.of("error", "Invalid space ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve space details"));
+                .body(Map.of("error", "Failed to retrieve space details: " + e.getMessage()));
         }
     }
 
@@ -175,7 +175,7 @@ public class SpaceController {
                 .body(Map.of("error", "Invalid space ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to update space"));
+                .body(Map.of("error", "Failed to update space: " + e.getMessage()));
         }
     }
 
@@ -212,7 +212,7 @@ public class SpaceController {
                 .body(Map.of("error", "Invalid space ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to delete space"));
+                .body(Map.of("error", "Failed to delete space: " + e.getMessage()));
         }
     }
 } 

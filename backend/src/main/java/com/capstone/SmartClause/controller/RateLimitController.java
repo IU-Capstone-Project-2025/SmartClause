@@ -82,7 +82,7 @@ public class RateLimitController {
         } catch (Exception e) {
             logger.error("Error getting rate limit status", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of("error", "Failed to get rate limit status"));
+                .body(Map.of("error", "Failed to get rate limit status: " + e.getMessage()));
         }
     }
     
@@ -121,7 +121,7 @@ public class RateLimitController {
         } catch (Exception e) {
             logger.error("Error getting cache statistics", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of("error", "Failed to get cache statistics"));
+                .body(Map.of("error", "Failed to get cache statistics: " + e.getMessage()));
         }
     }
     
@@ -159,7 +159,7 @@ public class RateLimitController {
         } catch (Exception e) {
             logger.error("Error clearing rate limit", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of("error", "Failed to clear rate limit"));
+                .body(Map.of("error", "Failed to clear rate limit: " + e.getMessage()));
         }
     }
 } 

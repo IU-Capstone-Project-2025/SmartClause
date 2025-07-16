@@ -77,19 +77,19 @@ public class RateLimitService {
         int dayCount = userData.getCountForTimeWindow(now, ChronoUnit.DAYS, 1);
         
         // Check if any limit is exceeded
-        if (minuteCount > minuteLimit) {
+        if (minuteCount >= minuteLimit) {
             logger.warn("Rate limit exceeded for user {}: {} requests in last minute (limit: {})", 
                        userIdentifier, minuteCount, minuteLimit);
             return new RateLimitResult(false, minuteCount, hourCount, dayCount);
         }
         
-        if (hourCount > hourLimit) {
+        if (hourCount >= hourLimit) {
             logger.warn("Rate limit exceeded for user {}: {} requests in last hour (limit: {})", 
                        userIdentifier, hourCount, hourLimit);
             return new RateLimitResult(false, minuteCount, hourCount, dayCount);
         }
         
-        if (dayCount > dayLimit) {
+        if (dayCount >= dayLimit) {
             logger.warn("Rate limit exceeded for user {}: {} requests in last day (limit: {})", 
                        userIdentifier, dayCount, dayLimit);
             return new RateLimitResult(false, minuteCount, hourCount, dayCount);

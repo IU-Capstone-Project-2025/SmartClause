@@ -70,7 +70,7 @@ public class ChatController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve messages"));
+                .body(Map.of("error", "Failed to retrieve messages: " + e.getMessage()));
         }
     }
 
@@ -116,7 +116,7 @@ public class ChatController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to send message"));
+                .body(Map.of("error", "Failed to send message: " + e.getMessage()));
         }
     }
 
@@ -155,7 +155,7 @@ public class ChatController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve chat session"));
+                .body(Map.of("error", "Failed to retrieve chat session: " + e.getMessage()));
         }
     }
 
@@ -201,7 +201,7 @@ public class ChatController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to update memory length"));
+                .body(Map.of("error", "Failed to update memory length: " + e.getMessage()));
         }
     }
 } 
