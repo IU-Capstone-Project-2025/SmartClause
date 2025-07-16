@@ -58,7 +58,7 @@ pipeline {
                         script: 'git symbolic-ref --short HEAD || git name-rev --name-only HEAD'
                     ).trim()
                     
-                    if (branchName == 'main') {
+                    if (branchName == 'main' || branchName == 'origin/main') {
                         echo "Starting deployment stage on Jenkins side (branch: ${branchName})"
                         
                         sshagent(['deploy-key-id']) {
