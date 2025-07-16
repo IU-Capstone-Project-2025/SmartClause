@@ -42,8 +42,7 @@ class RetrievalService:
         self,
         query: str,
         k: int = 10,
-        distance_function: str = "l2",
-        auth_token: str = None
+        distance_function: str = "l2"
     ) -> Optional[RetrieveResponse]:
         """
         Retrieve legal rules from analyzer microservice using /retrieve-rules endpoint
@@ -52,7 +51,6 @@ class RetrievalService:
             query: Search query for legal rules
             k: Number of results to retrieve
             distance_function: Distance function to use
-            auth_token: JWT token for authorization
             
         Returns:
             RetrieveResponse or None if error
@@ -66,10 +64,10 @@ class RetrievalService:
             
             url = f"{self.analyzer_base_url}/retrieve-rules"
             
-            # Set up headers with authentication if token is provided
+            # Set up headers for the request
             headers = {"Content-Type": "application/json"}
-            if auth_token:
-                headers["Authorization"] = f"Bearer {auth_token}"
+            # Note: For service-to-service calls, analyzer might require authentication
+            # This should be implemented with proper service account tokens
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Requesting legal rules from {url} with query: '{query[:50]}...'")
