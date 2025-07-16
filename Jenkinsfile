@@ -51,25 +51,35 @@ pipeline {
             }
         }
         stage('Deploy') {
-            when {
-                branch 'main'
-            }
             steps {
-                echo "Starting deployment stage on Jenkins side"
-                sshagent(['deploy-key-id']) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
-                            echo "=== Starting deployment ===" &&
-                            cd SmartClause &&
-                            git pull &&
-                            ./docker/build_frontend.sh &&
-                            docker compose down &&
-                            docker compose up -d --build &&
-                            echo "=== Deploy completed successfully ==="
-                        '
-                    '''
+                script {
+                    def branchName = sh(
+                        returnStdout: true, 
+                        script: 'git rev-parse --abbrev-ref HEAD'
+                    ).trim()
+                    
+                    if (branchName == 'main') {
+                        echo "Starting deployment stage on Jenkins side (branch: ${branchName})"
+                        
+                        sshagent(['deploy-key-id']) {
+                            sh '''
+                                ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
+                                    echo "=== Starting deployment ===" &&
+                                    cd SmartClause &&
+                                    git pull &&
+                                    ./docker/build_frontend.sh &&
+                                    docker compose down &&
+                                    docker compose up -d --build &&
+                                    echo "=== Deploy completed successfully ==="
+                                '
+                            '''
+                        }
+                        
+                        echo "Deploy stage finished successfully on Jenkins side"
+                    } else {
+                        echo "Skipping deployment: current branch is '${branchName}', not 'main'"
+                    }
                 }
-                echo "Deploy stage finished successfully on Jenkins side"
             }
         }
     }
