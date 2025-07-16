@@ -66,7 +66,9 @@ pipeline {
                                 ssh -o StrictHostKeyChecking=no deploy@158.160.190.57 '
                                     echo "=== Starting deployment ===" &&
                                     cd SmartClause &&
-                                    git pull &&
+                                    git fetch origin &&
+                                    git reset --hard origin/main &&
+                                    chmod +x ./docker/build_frontend.sh &&
                                     ./docker/build_frontend.sh &&
                                     docker compose down &&
                                     docker compose up -d --build &&

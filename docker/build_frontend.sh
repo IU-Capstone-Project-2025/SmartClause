@@ -1,4 +1,4 @@
-cd /frontend
+cd frontend
 npm install
 npm run build
 BUILD_DIR="/home/deploy/SmartClause/frontend/dist"
