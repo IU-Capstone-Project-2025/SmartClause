@@ -78,9 +78,16 @@ export default {
         })
         .catch(error => {
           console.error('Processing failed:', error);
-          this.statusText = this.$t('processingScreen.statusError');
-          // Optionally, redirect back to upload screen after a delay
           setTimeout(() => this.$router.push('/'), 2000);
+          let errorMessage = this.$t('processingScreen.statusError');
+          if (error.response && error.response.data && error.response.data.detail) {
+            errorMessage = `${errorMessage}: ${error.response.data.detail}`;
+          } else if (error.response && error.response.data && error.response.data.error) {
+            errorMessage = `${errorMessage}: ${error.response.data.error}`;
+          } else if (error.response && error.response.data && error.response.data.message) {
+            errorMessage = `${errorMessage}: ${error.response.data.message}`;
+          }
+          this.statusText = errorMessage;
         });
     },
     cancel() {
