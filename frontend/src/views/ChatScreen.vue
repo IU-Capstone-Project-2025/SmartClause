@@ -238,6 +238,9 @@ export default {
             }
         } catch (error) {
             console.error('Error fetching spaces:', error);
+            if (error.response && error.response.status === 401) {
+              this.$router.push('/login');
+            }
         }
     }
   },
