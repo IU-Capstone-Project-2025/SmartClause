@@ -177,7 +177,7 @@ public class AuthController {
         } catch (Exception e) {
             logger.error("Error getting user profile: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to get user profile"));
+                .body(Map.of("error", "Failed to get user profile: " + e.getMessage()));
         }
     }
     

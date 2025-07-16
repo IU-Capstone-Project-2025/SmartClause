@@ -22,6 +22,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
+import com.capstone.SmartClause.service.RateLimitService;
+import com.capstone.SmartClause.util.AuthUtils;
+import com.capstone.SmartClause.util.UserIdentificationUtils;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -60,7 +65,26 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public RateLimitFilter rateLimitFilter(RateLimitService rateLimitService, 
+                                          RateLimitConfig rateLimitConfig,
+                                          UserIdentificationUtils userIdentificationUtils,
+                                          AuthUtils authUtils) {
+        return new RateLimitFilter(rateLimitService, rateLimitConfig, userIdentificationUtils, authUtils);
+    }
+
+    /**
+     * Disable automatic registration of RateLimitFilter by Spring Boot.
+     * We only want it registered in the Spring Security filter chain, not as a servlet filter.
+     */
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter rateLimitFilter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(rateLimitFilter);
+        registration.setEnabled(false); // Disable automatic registration
+        return registration;
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -85,6 +109,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())
+            .addFilterBefore(rateLimitFilter, org.springframework.security.web.header.HeaderWriterFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(authenticationEntryPoint())
