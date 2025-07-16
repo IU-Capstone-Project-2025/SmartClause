@@ -80,10 +80,10 @@ public class DocumentController {
                 .body(Map.of("error", e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to upload document"));
+                .body(Map.of("error", "Failed to upload document: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to upload document"));
+                .body(Map.of("error", "Failed to upload document: " + e.getMessage()));
         }
     }
 
@@ -119,7 +119,7 @@ public class DocumentController {
                 .body(Map.of("error", "Invalid space ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve documents"));
+                .body(Map.of("error", "Failed to retrieve documents: " + e.getMessage()));
         }
     }
 
@@ -159,7 +159,7 @@ public class DocumentController {
                 .body(Map.of("error", "Invalid document ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve document details"));
+                .body(Map.of("error", "Failed to retrieve document details: " + e.getMessage()));
         }
     }
 
@@ -198,7 +198,7 @@ public class DocumentController {
                 .body(Map.of("error", "Invalid document ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to delete document"));
+                .body(Map.of("error", "Failed to delete document: " + e.getMessage()));
         }
     }
 
@@ -239,7 +239,7 @@ public class DocumentController {
                 .body(Map.of("error", "Invalid document ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to retrieve analysis results"));
+                .body(Map.of("error", "Failed to retrieve analysis results: " + e.getMessage()));
         }
     }
 
@@ -278,7 +278,7 @@ public class DocumentController {
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to start reanalysis"));
+                .body(Map.of("error", "Failed to start reanalysis: " + e.getMessage()));
         }
     }
 
@@ -325,7 +325,7 @@ public class DocumentController {
                 .body(Map.of("error", "Invalid document ID format"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to export analysis PDF"));
+                .body(Map.of("error", "Failed to export analysis PDF: " + e.getMessage()));
         }
     }
 } 
