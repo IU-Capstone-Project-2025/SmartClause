@@ -29,6 +29,8 @@ import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import java.io.IOException;
+import com.capstone.SmartClause.service.RateLimitService;
+import com.capstone.SmartClause.util.UserIdentificationUtils;
 
 @RestController
 @RequestMapping("/api")
@@ -43,6 +45,12 @@ public class DocumentController {
     
     @Autowired
     private AuthUtils authUtils;
+    
+    @Autowired
+    private RateLimitService rateLimitService;
+    
+    @Autowired
+    private UserIdentificationUtils userIdentificationUtils;
 
     @Operation(summary = "Upload document to space", description = "Uploads a document file to a specific space")
     @ApiResponses(value = {
@@ -79,6 +87,11 @@ public class DocumentController {
             DocumentDto.DocumentUploadResult result = documentService.uploadDocument(spaceUuid, file, userId, authToken);
             
             if (result.isDuplicate()) {
+                // Refund the rate limit since no actual processing happened
+                String userIdentifier = userIdentificationUtils.generateUserIdentifier(request, userId);
+                rateLimitService.refundRequest(userIdentifier);
+                logger.info("Refunded rate limit for duplicate upload by user: {}", userIdentifier);
+                
                 // Return 409 Conflict with duplicate information
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of(
