@@ -11,6 +11,7 @@ import com.capstone.SmartClause.model.Space;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,9 @@ public class DocumentService {
 
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private ApplicationContext applicationContext;
 
     // Directory for storing uploaded files
     private final String uploadDir = "uploads/";
@@ -123,11 +127,11 @@ public class DocumentService {
         return Optional.of(response);
     }
 
-    public DocumentDto.DocumentUploadResponse uploadDocument(UUID spaceId, MultipartFile file, String userId) throws IOException {
+    public DocumentDto.DocumentUploadResult uploadDocument(UUID spaceId, MultipartFile file, String userId) throws IOException {
         return uploadDocument(spaceId, file, userId, null);
     }
 
-    public DocumentDto.DocumentUploadResponse uploadDocument(UUID spaceId, MultipartFile file, String userId, String authorizationHeader) throws IOException {
+    public DocumentDto.DocumentUploadResult uploadDocument(UUID spaceId, MultipartFile file, String userId, String authorizationHeader) throws IOException {
         logger.info("Uploading document to space: {} by user: {}", spaceId, userId);
 
         // Validate space exists
@@ -174,9 +178,34 @@ public class DocumentService {
         byte[] fileContent = file.getBytes();
         document.setContent(fileContent);
         
-        // Generate content hash for caching
+        // Generate content hash for caching and duplicate detection
         String contentHash = generateContentHash(fileContent);
         document.setContentHash(contentHash);
+        
+        // Check for duplicate document in this space for this user
+        Optional<Document> existingDocument = documentRepository.findByContentHashAndSpaceIdAndUserId(
+            contentHash, spaceId, userId);
+        
+        if (existingDocument.isPresent()) {
+            logger.info("Duplicate document detected: contentHash={}, spaceId={}, userId={}", 
+                contentHash.substring(0, 8) + "...", spaceId, userId);
+            
+            Document existing = existingDocument.get();
+            
+            DocumentDto.DocumentDuplicateInfo duplicateInfo = new DocumentDto.DocumentDuplicateInfo();
+            duplicateInfo.setExistingDocumentId(existing.getId().toString());
+            duplicateInfo.setExistingDocumentName(existing.getName());
+            duplicateInfo.setUploadedAt(existing.getUploadedAt());
+            duplicateInfo.setAnalysisStatus(existing.getStatus().name().toLowerCase());
+            duplicateInfo.setMessage("A document with identical content already exists in this space.");
+            
+            DocumentDto.DocumentUploadResult result = new DocumentDto.DocumentUploadResult();
+            result.setDuplicate(true);
+            result.setUploadResponse(null);
+            result.setDuplicateInfo(duplicateInfo);
+            
+            return result;
+        }
         
         Document savedDocument = documentRepository.save(document);
         logger.info("Uploaded document with ID: {}", savedDocument.getId());
@@ -193,7 +222,14 @@ public class DocumentService {
             startDocumentAnalysis(savedDocument, authorizationHeader);
         }
 
-        return convertToDocumentUploadResponse(savedDocument);
+        DocumentDto.DocumentUploadResponse uploadResponse = convertToDocumentUploadResponse(savedDocument);
+        
+        DocumentDto.DocumentUploadResult result = new DocumentDto.DocumentUploadResult();
+        result.setDuplicate(false);
+        result.setUploadResponse(uploadResponse);
+        result.setDuplicateInfo(null);
+        
+        return result;
     }
 
     public Optional<Map<String, Object>> getDocumentAnalysis(UUID documentId) {
@@ -284,31 +320,61 @@ public class DocumentService {
     public String reanalyzeDocument(UUID documentId, String userId, String authorizationHeader) {
         logger.info("Starting reanalysis for document: {} for user: {}", documentId, userId);
         
-        Optional<Document> documentOpt = userId != null 
-            ? documentRepository.findByIdAndUserId(documentId, userId)
-            : documentRepository.findById(documentId);
+        try {
+            Optional<Document> documentOpt = userId != null 
+                ? documentRepository.findByIdAndUserId(documentId, userId)
+                : documentRepository.findById(documentId);
+                
+            if (documentOpt.isEmpty()) {
+                logger.error("Document not found for reanalysis: documentId={}, userId={}", documentId, userId);
+                throw new IllegalArgumentException("Document not found");
+            }
+
+            Document document = documentOpt.get();
+            logger.info("Found document for reanalysis: {}", document.getId());
             
-        if (documentOpt.isEmpty()) {
-            throw new IllegalArgumentException("Document not found");
+            // Delete existing analysis results if they exist
+            if (document.getAnalysisDocumentId() != null) {
+                logger.info("Deleting existing analysis results for document: {}", document.getAnalysisDocumentId());
+                try {
+                    analysisResultRepository.deleteByDocumentId(document.getAnalysisDocumentId());
+                    logger.info("Successfully deleted existing analysis results");
+                } catch (Exception e) {
+                    logger.error("Error deleting existing analysis results: {}", e.getMessage(), e);
+                    // Continue with reanalysis even if deletion fails
+                }
+            }
+
+            // Reset document status and analysis ID
+            document.setStatus(Document.DocumentStatus.PROCESSING);
+            String newAnalysisDocumentId = UUID.randomUUID().toString();
+            document.setAnalysisDocumentId(newAnalysisDocumentId);
+            logger.info("Generated new analysis document ID: {}", newAnalysisDocumentId);
+            
+            try {
+                documentRepository.save(document);
+                logger.info("Successfully saved document with new analysis ID");
+            } catch (Exception e) {
+                logger.error("Error saving document during reanalysis: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to update document for reanalysis", e);
+            }
+
+            // Start new analysis with authorization header (bypass cache for reanalysis)
+            try {
+                // Get the Spring proxy to ensure @Async works properly
+                DocumentService self = applicationContext.getBean(DocumentService.class);
+                self.analyzeDocumentAsync(document, newAnalysisDocumentId, authorizationHeader, true);
+                logger.info("Successfully started async reanalysis for document: {}", documentId);
+            } catch (Exception e) {
+                logger.error("Error starting async reanalysis: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to start reanalysis", e);
+            }
+            
+            return newAnalysisDocumentId;
+        } catch (Exception e) {
+            logger.error("Reanalysis failed for document: {} for user: {}", documentId, userId, e);
+            throw e; // Re-throw to be handled by controller
         }
-
-        Document document = documentOpt.get();
-        
-        // Delete existing analysis results if they exist
-        if (document.getAnalysisDocumentId() != null) {
-            analysisResultRepository.deleteByDocumentId(document.getAnalysisDocumentId());
-        }
-
-        // Reset document status and analysis ID
-        document.setStatus(Document.DocumentStatus.PROCESSING);
-        String newAnalysisDocumentId = UUID.randomUUID().toString();
-        document.setAnalysisDocumentId(newAnalysisDocumentId);
-        documentRepository.save(document);
-
-        // Start new analysis with authorization header
-        analyzeDocumentAsync(document, newAnalysisDocumentId, authorizationHeader);
-        
-        return newAnalysisDocumentId;
     }
 
     public byte[] exportDocumentAnalysisPdf(UUID documentId, String userId) {
@@ -366,8 +432,10 @@ public class DocumentService {
             document.setAnalysisDocumentId(analysisDocumentId);
             documentRepository.save(document);
 
-            // Call analyzer microservice asynchronously
-            analyzeDocumentAsync(document, analysisDocumentId, authorizationHeader);
+            // Call analyzer microservice asynchronously (normal upload, use cache)
+            // Get the Spring proxy to ensure @Async works properly
+            DocumentService self = applicationContext.getBean(DocumentService.class);
+            self.analyzeDocumentAsync(document, analysisDocumentId, authorizationHeader, false);
 
         } catch (Exception e) {
             logger.error("Failed to start analysis for document: {}", document.getId(), e);
@@ -376,13 +444,18 @@ public class DocumentService {
         }
     }
 
-    @Async
+    @Async("taskExecutor")
     public void analyzeDocumentAsync(Document document, String analysisDocumentId) {
-        analyzeDocumentAsync(document, analysisDocumentId, null);
+        analyzeDocumentAsync(document, analysisDocumentId, null, false);
     }
 
-    @Async
+    @Async("taskExecutor")
     public void analyzeDocumentAsync(Document document, String analysisDocumentId, String authorizationHeader) {
+        analyzeDocumentAsync(document, analysisDocumentId, authorizationHeader, false);
+    }
+    
+    @Async("taskExecutor")
+    public void analyzeDocumentAsync(Document document, String analysisDocumentId, String authorizationHeader, boolean bypassCache) {
         try {
             logger.info("Starting async analysis for document: {} with analysis ID: {}", document.getId(), analysisDocumentId);
 
@@ -396,8 +469,8 @@ public class DocumentService {
                 fileBytes
             );
 
-            // Call the analyzer microservice
-            AnalysisResponse analysisResponse = analysisService.analyzeDocument(analysisDocumentId, multipartFile, authorizationHeader);
+            // Call the analyzer microservice (with cache bypass flag for reanalysis)
+            AnalysisResponse analysisResponse = analysisService.analyzeDocument(analysisDocumentId, multipartFile, authorizationHeader, bypassCache);
             
             if (analysisResponse != null) {
                 logger.info("Analysis completed successfully for document: {}", document.getId());

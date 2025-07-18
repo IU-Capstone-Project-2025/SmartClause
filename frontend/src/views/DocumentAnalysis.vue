@@ -85,8 +85,7 @@ export default {
         const documentId = this.$route.params.documentId;
         const response = await api.getDocumentAnalysis(documentId);
         
-        // This is a temporary mock because the filename is not available in the analysis endpoint
-        // In a real scenario, we might need to fetch document details separately
+        // Fetch document details for filename
         const docDetailsResponse = await api.getDocumentDetails(documentId);
         this.fileName = docDetailsResponse.data.document.name || 'Unknown file';
 

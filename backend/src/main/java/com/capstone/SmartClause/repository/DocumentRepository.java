@@ -39,4 +39,10 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
     
     // Check if document exists by name in space (to prevent duplicates)
     boolean existsByNameAndSpaceId(String name, UUID spaceId);
+    
+    // Find document by content hash in space for duplicate detection
+    Optional<Document> findByContentHashAndSpaceIdAndUserId(String contentHash, UUID spaceId, String userId);
+    
+    // Check if document with same content hash exists in space for user
+    boolean existsByContentHashAndSpaceIdAndUserId(String contentHash, UUID spaceId, String userId);
 } 

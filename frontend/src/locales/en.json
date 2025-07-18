@@ -62,6 +62,12 @@
     "deleteButton": "Delete",
     "cancelButton": "Cancel"
   },
+  "duplicateDocumentModal": {
+    "title": "Duplicate Document Detected",
+    "question": "Do you want to re-analyze this document?",
+    "cancel": "Cancel",
+    "reanalyze": "Re-analyze"
+  },
   "chatWindow": {
     "placeholder": "Type your message here...",
     "disclaimer": "SmartClause can be inaccurate. Consider checking important information.",

@@ -2,6 +2,7 @@ package com.capstone.SmartClause.repository;
 
 import com.capstone.SmartClause.model.AnalysisResult;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -45,6 +46,7 @@ public interface AnalysisResultRepository extends JpaRepository<AnalysisResult, 
     List<AnalysisResult> findExpiredCacheEntries(@Param("now") LocalDateTime now);
     
     // Delete expired cache entries
+    @Modifying
     @Query("DELETE FROM AnalysisResult ar WHERE ar.expiresAt <= :now")
     int deleteExpiredCacheEntries(@Param("now") LocalDateTime now);
     

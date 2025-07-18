@@ -37,6 +37,13 @@
       @toggle-collapse="toggleDocumentsSidebar"
       @delete-document="handleDeleteDocument"
     />
+    
+    <DuplicateDocumentModal
+      v-if="duplicateModalData"
+      :duplicate-info="duplicateModalData.duplicateInfo"
+      @close="closeDuplicateModal"
+      @reanalyze="handleReanalyze"
+    />
   </div>
 </template>
 
@@ -44,6 +51,7 @@
 import SpacesSidebar from '@/components/SpacesSidebar.vue';
 import DocumentsSidebar from '@/components/DocumentsSidebar.vue';
 import ChatWindow from '@/components/ChatWindow.vue';
+import DuplicateDocumentModal from '@/components/DuplicateDocumentModal.vue';
 import * as api from '@/services/api';
 
 export default {
@@ -52,6 +60,7 @@ export default {
     SpacesSidebar,
     DocumentsSidebar,
     ChatWindow,
+    DuplicateDocumentModal,
   },
   data() {
     return {
@@ -63,6 +72,7 @@ export default {
       messages: [],
       documents: [],
       uploadingFiles: {},
+      duplicateModalData: null,
     };
   },
   computed: {
@@ -191,43 +201,162 @@ export default {
         
         const currentSpaceId = this.selectedSpaceId;
 
-        const newUploadingFiles = Array.from(files).map(file => ({
+        // Process files one by one to handle duplicates individually
+        for (const file of files) {
+            await this.handleSingleFileUpload(file, currentSpaceId);
+        }
+    },
+    
+    async handleSingleFileUpload(file, spaceId) {
+        const uploadingFile = {
             id: `uploading-${file.name}-${Date.now()}`,
             name: file.name,
-        }));
+        };
         
+        // Add to uploading files list
         this.uploadingFiles = {
           ...this.uploadingFiles,
-          [currentSpaceId]: [...(this.uploadingFiles[currentSpaceId] || []), ...newUploadingFiles]
+          [spaceId]: [...(this.uploadingFiles[spaceId] || []), uploadingFile]
         };
 
         try {
-            await Promise.all(Array.from(files).map(file => api.uploadDocument(currentSpaceId, file)));
+            const result = await api.uploadDocumentWithDuplicateCheck(spaceId, file);
+            
+            if (result.isDuplicate) {
+                // Show duplicate modal
+                this.duplicateModalData = {
+                    duplicateInfo: result.duplicateInfo,
+                    file: file,
+                    spaceId: spaceId,
+                    uploadingFile: uploadingFile
+                };
+            } else if (result.success) {
+                // Successful upload - refresh documents list
+                if (this.selectedSpaceId === spaceId) {
+                    await this.refreshDocuments(spaceId);
+                }
+            }
         } catch (error) {
-            console.error('Error uploading files:', error);
+            console.error('Error uploading file:', error);
             if (this.$refs.documentsSidebar) {
               const message = error.response?.data?.error || this.$t('documentsSidebar.uploadError');
               this.$refs.documentsSidebar.uploadError = message;
             }
         } finally {
-            // Refresh the documents list from the server, but only if we are still in the same space
-            if (this.selectedSpaceId === currentSpaceId) {
-                try {
-                    const documentsRes = await api.getDocuments(currentSpaceId);
-                    this.documents = documentsRes.data.documents || [];
-                } catch (e) {
-                    console.error('Error fetching documents after upload:', e);
-                }
-            }
-            // Remove the files that were just being uploaded from the uploadingFiles list
-            const newUploadingFileIds = new Set(newUploadingFiles.map(f => f.id));
-            if (this.uploadingFiles[currentSpaceId]) {
+            // Remove from uploading files list
+            if (this.uploadingFiles[spaceId]) {
                 this.uploadingFiles = {
                   ...this.uploadingFiles,
-                  [currentSpaceId]: this.uploadingFiles[currentSpaceId].filter(f => !newUploadingFileIds.has(f.id))
+                  [spaceId]: this.uploadingFiles[spaceId].filter(f => f.id !== uploadingFile.id)
                 };
             }
         }
+    },
+    
+    async refreshDocuments(spaceId) {
+        try {
+            const documentsRes = await api.getDocuments(spaceId);
+            this.documents = documentsRes.data.documents || [];
+        } catch (e) {
+            console.error('Error fetching documents after upload:', e);
+        }
+    },
+    
+    closeDuplicateModal() {
+        this.duplicateModalData = null;
+    },
+    
+    async handleReanalyze() {
+        if (!this.duplicateModalData) return;
+        
+        const existingDocumentId = this.duplicateModalData.duplicateInfo.existingDocumentId;
+        const spaceId = this.duplicateModalData.spaceId;
+        
+        // Close modal immediately
+        this.closeDuplicateModal();
+        
+        // Add document to reanalyzing state if documents sidebar exists
+        if (this.$refs.documentsSidebar) {
+            this.$refs.documentsSidebar.reanalyzingDocIds.push(existingDocumentId);
+        }
+        
+        try {
+            await api.reanalyzeDocument(existingDocumentId);
+            
+            // Poll until analysis is complete, then navigate
+            await this.waitForAnalysisCompletion(existingDocumentId);
+            
+            // Navigate to analysis page only when results are ready
+            this.$router.push({
+                name: 'Analysis',
+                params: {
+                    spaceId: spaceId,
+                    documentId: existingDocumentId
+                }
+            }).then(() => {
+                // Remove from reanalyzing list when navigation is complete
+                if (this.$refs.documentsSidebar) {
+                    const index = this.$refs.documentsSidebar.reanalyzingDocIds.indexOf(existingDocumentId);
+                    if (index > -1) {
+                        this.$refs.documentsSidebar.reanalyzingDocIds.splice(index, 1);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error reanalyzing document:', error);
+            if (this.$refs.documentsSidebar) {
+                const message = error.response?.data?.error || this.$t('documentsSidebar.reanalysisError');
+                this.$refs.documentsSidebar.uploadError = message;
+                // Remove from reanalyzing list on error
+                const index = this.$refs.documentsSidebar.reanalyzingDocIds.indexOf(existingDocumentId);
+                if (index > -1) {
+                    this.$refs.documentsSidebar.reanalyzingDocIds.splice(index, 1);
+                }
+            }
+        }
+    },
+    
+    async waitForAnalysisCompletion(documentId) {
+      const maxAttempts = 120; // 10 minutes (120 * 5 seconds)
+      let attempts = 0;
+      
+      return new Promise((resolve, reject) => {
+        const poll = async () => {
+          attempts++;
+          
+          try {
+            const response = await api.getDocumentAnalysis(documentId);
+            
+            // Check if analysis is complete (document_points exists, even if empty)
+            if (response.data && response.data.document_points !== undefined) {
+              // Analysis is complete (even if no issues found)
+              resolve();
+              return;
+            }
+            
+            if (attempts >= maxAttempts) {
+              reject(new Error('Analysis timeout - took too long to complete'));
+              return;
+            }
+            
+            // Continue polling
+            setTimeout(poll, 5000); // Poll every 5 seconds
+            
+          } catch (error) {
+            // 404 or other error means analysis not ready yet
+            if (attempts >= maxAttempts) {
+              reject(error);
+              return;
+            }
+            
+            // Continue polling on error (analysis might not be ready yet)
+            setTimeout(poll, 5000);
+          }
+        };
+        
+        // Start polling
+        poll();
+      });
     },
     async handleDeleteDocument(docId) {
       try {

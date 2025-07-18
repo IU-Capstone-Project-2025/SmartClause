@@ -62,4 +62,24 @@ public class DocumentDto {
         @Schema(type = "string", format = "binary", description = "File to upload")
         private MultipartFile file;
     }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DocumentUploadResult {
+        private boolean isDuplicate;
+        private DocumentUploadResponse uploadResponse;
+        private DocumentDuplicateInfo duplicateInfo;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DocumentDuplicateInfo {
+        private String existingDocumentId;
+        private String existingDocumentName;
+        private LocalDateTime uploadedAt;
+        private String analysisStatus;
+        private String message;
+    }
 } 

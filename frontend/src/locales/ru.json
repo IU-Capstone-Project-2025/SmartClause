@@ -62,6 +62,12 @@
     "deleteButton": "Удалить",
     "cancelButton": "Отмена"
   },
+  "duplicateDocumentModal": {
+    "title": "Обнаружен дублированный документ",
+    "question": "Хотите ли вы повторно проанализировать этот документ?",
+    "cancel": "Отмена",
+    "reanalyze": "Повторный анализ"
+  },
   "chatWindow": {
     "placeholder": "Введите ваше сообщение...",
     "disclaimer": "SmartClause может быть неточен. Проверяйте важную информацию.",

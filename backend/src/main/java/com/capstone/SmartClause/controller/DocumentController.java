@@ -3,6 +3,8 @@ package com.capstone.SmartClause.controller;
 import com.capstone.SmartClause.model.dto.DocumentDto;
 import com.capstone.SmartClause.service.DocumentService;
 import com.capstone.SmartClause.util.AuthUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +35,8 @@ import java.io.IOException;
 @CrossOrigin(origins = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE}, maxAge = 3600)
 @Tag(name = "Documents API", description = "API for managing documents and analysis")
 public class DocumentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(DocumentController.class);
 
     @Autowired
     private DocumentService documentService;
@@ -72,9 +76,20 @@ public class DocumentController {
                 authToken = "Bearer " + authToken;
             }
             
-            DocumentDto.DocumentUploadResponse response = documentService.uploadDocument(spaceUuid, file, userId, authToken);
+            DocumentDto.DocumentUploadResult result = documentService.uploadDocument(spaceUuid, file, userId, authToken);
             
-            return ResponseEntity.ok(response);
+            if (result.isDuplicate()) {
+                // Return 409 Conflict with duplicate information
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                        "isDuplicate", true,
+                        "duplicateInfo", result.getDuplicateInfo(),
+                        "message", "Document with identical content already exists in this space"
+                    ));
+            } else {
+                // Return normal upload response
+                return ResponseEntity.ok(result.getUploadResponse());
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
@@ -258,25 +273,31 @@ public class DocumentController {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
+            logger.info("Reanalyze request for document: {}", documentUuid);
             
             // Extract user ID from cookies or authorization header
             String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
+                logger.warn("Unauthorized reanalysis request for document: {}", documentUuid);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, null); // No authToken needed for reanalysis
+            logger.info("Starting reanalysis for document: {} by user: {}", documentUuid, userId);
+            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, authorization); // Pass user's auth token for reanalysis
             
+            logger.info("Reanalysis started successfully for document: {}, analysis ID: {}", documentUuid, analysisId);
             return ResponseEntity.accepted()
                 .body(Map.of(
                     "message", "Analysis started",
                     "analysis_id", analysisId
                 ));
         } catch (IllegalArgumentException e) {
+            logger.error("Bad request for reanalysis of document {}: {}", documentId, e.getMessage());
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
+            logger.error("Internal error during reanalysis of document {}: {}", documentId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to start reanalysis: " + e.getMessage()));
         }

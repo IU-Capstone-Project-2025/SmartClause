@@ -44,10 +44,14 @@ public class AnalysisService {
     private final int CACHE_TTL_HOURS = 1;
 
     public AnalysisResponse analyzeDocument(String id, MultipartFile file) throws IOException {
-        return analyzeDocument(id, file, null);
+        return analyzeDocument(id, file, null, false);
     }
 
     public AnalysisResponse analyzeDocument(String id, MultipartFile file, String authorizationHeader) throws IOException {
+        return analyzeDocument(id, file, authorizationHeader, false);
+    }
+    
+    public AnalysisResponse analyzeDocument(String id, MultipartFile file, String authorizationHeader, boolean bypassCache) throws IOException {
         logger.info("Sending document for analysis: id={}, filename={}", id, file.getOriginalFilename());
         logger.info("Received authorization header: {}", authorizationHeader != null ? "[PRESENT]" : "[NULL]");
 
@@ -58,16 +62,21 @@ public class AnalysisService {
         // Determine user ID for caching (anonymous for landing page users)
         String userId = determineUserIdForCaching(authorizationHeader);
         
-        // Check cache before expensive analysis
-        Optional<AnalysisResult> cachedResult = checkCachedAnalysis(contentHash, userId);
-        if (cachedResult.isPresent()) {
-            logger.info("CACHE HIT: Returning cached analysis for hash: {} (user: {})", 
+        // Check cache before expensive analysis (unless explicitly bypassed for reanalysis)
+        if (!bypassCache) {
+            Optional<AnalysisResult> cachedResult = checkCachedAnalysis(contentHash, userId);
+            if (cachedResult.isPresent()) {
+                logger.info("CACHE HIT: Returning cached analysis for hash: {} (user: {})", 
+                    contentHash.substring(0, 8) + "...", userId);
+                return convertCachedResultToAnalysisResponse(cachedResult.get());
+            }
+            
+            logger.info("CACHE MISS: Starting new analysis for hash: {} (user: {})", 
                 contentHash.substring(0, 8) + "...", userId);
-            return convertCachedResultToAnalysisResponse(cachedResult.get());
+        } else {
+            logger.info("CACHE BYPASS: Starting fresh analysis for reanalysis request - hash: {} (user: {})", 
+                contentHash.substring(0, 8) + "...", userId);
         }
-        
-        logger.info("CACHE MISS: Starting new analysis for hash: {} (user: {})", 
-            contentHash.substring(0, 8) + "...", userId);
 
         String analyzeUrl = analyzerApiUrl + "/analyze";
 
@@ -114,7 +123,7 @@ public class AnalysisService {
             logger.info("Analysis completed successfully for document: {}", id);
             AnalysisResponse analysisResponse = response.getBody();
             
-            // Save to cache for future requests
+            // Save to cache for future requests (always save, even for reanalysis)
             if (analysisResponse != null) {
                 saveToCacheAsync(id, userId, contentHash, analysisResponse);
             }
