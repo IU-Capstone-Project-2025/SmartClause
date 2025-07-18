@@ -5,9 +5,11 @@ WORKDIR /app
 RUN yum install -y curl && yum clean all
 
 COPY pom.xml .
-COPY src src
 
 RUN mvn dependency:go-offline -B
+
+COPY src src
+
 RUN mvn package -DskipTests
 
 FROM amazoncorretto:21-alpine
