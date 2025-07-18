@@ -155,6 +155,25 @@ public class RateLimitService {
     }
     
     /**
+     * Refund a previously consumed rate limit request.
+     * This is useful when a request was allowed but then determined to be a duplicate
+     * or otherwise not worthy of consuming the rate limit.
+     * 
+     * @param userIdentifier Unique identifier for the user
+     */
+    public void refundRequest(String userIdentifier) {
+        if (!config.isEnabled()) {
+            return;
+        }
+        
+        RateLimitData userData = rateLimitCache.getIfPresent(userIdentifier);
+        if (userData != null) {
+            userData.removeLatestRequest();
+            logger.debug("Refunded rate limit request for user: {}", userIdentifier);
+        }
+    }
+    
+    /**
      * Get cache statistics.
      */
     public String getCacheStats() {

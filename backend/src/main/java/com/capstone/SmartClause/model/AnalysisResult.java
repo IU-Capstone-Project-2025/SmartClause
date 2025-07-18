@@ -25,9 +25,21 @@ public class AnalysisResult {
     @Column(name = "document_id", nullable = false, length = 255)
     private String documentId;
     
+    // User ID for user-specific caching
+    @Column(name = "user_id", length = 255)
+    private String userId;
+    
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "analysis_points", columnDefinition = "jsonb")
     private Map<String, Object> analysisPoints;
+    
+    // Content hash for caching lookups
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+    
+    // Cache expiry time (default 1 hour from creation)
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
     
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

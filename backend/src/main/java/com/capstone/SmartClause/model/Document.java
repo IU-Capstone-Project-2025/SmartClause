@@ -65,6 +65,10 @@ public class Document {
     @Column(name = "content")
     private byte[] content;
     
+    // Content hash for caching and duplicate detection
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+    
     public enum DocumentStatus {
         UPLOADING, PROCESSING, COMPLETED, ERROR
     }

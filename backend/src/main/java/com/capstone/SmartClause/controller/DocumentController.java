@@ -3,6 +3,8 @@ package com.capstone.SmartClause.controller;
 import com.capstone.SmartClause.model.dto.DocumentDto;
 import com.capstone.SmartClause.service.DocumentService;
 import com.capstone.SmartClause.util.AuthUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,8 @@ import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import java.io.IOException;
+import com.capstone.SmartClause.service.RateLimitService;
+import com.capstone.SmartClause.util.UserIdentificationUtils;
 
 @RestController
 @RequestMapping("/api")
@@ -34,11 +38,19 @@ import java.io.IOException;
 @Tag(name = "Documents API", description = "API for managing documents and analysis")
 public class DocumentController {
 
+    private static final Logger logger = LoggerFactory.getLogger(DocumentController.class);
+
     @Autowired
     private DocumentService documentService;
     
     @Autowired
     private AuthUtils authUtils;
+    
+    @Autowired
+    private RateLimitService rateLimitService;
+    
+    @Autowired
+    private UserIdentificationUtils userIdentificationUtils;
 
     @Operation(summary = "Upload document to space", description = "Uploads a document file to a specific space")
     @ApiResponses(value = {
@@ -72,9 +84,25 @@ public class DocumentController {
                 authToken = "Bearer " + authToken;
             }
             
-            DocumentDto.DocumentUploadResponse response = documentService.uploadDocument(spaceUuid, file, userId, authToken);
+            DocumentDto.DocumentUploadResult result = documentService.uploadDocument(spaceUuid, file, userId, authToken);
             
-            return ResponseEntity.ok(response);
+            if (result.isDuplicate()) {
+                // Refund the rate limit since no actual processing happened
+                String userIdentifier = userIdentificationUtils.generateUserIdentifier(request, userId);
+                rateLimitService.refundRequest(userIdentifier);
+                logger.info("Refunded rate limit for duplicate upload by user: {}", userIdentifier);
+                
+                // Return 409 Conflict with duplicate information
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                        "isDuplicate", true,
+                        "duplicateInfo", result.getDuplicateInfo(),
+                        "message", "Document with identical content already exists in this space"
+                    ));
+            } else {
+                // Return normal upload response
+                return ResponseEntity.ok(result.getUploadResponse());
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
@@ -258,25 +286,31 @@ public class DocumentController {
         
         try {
             UUID documentUuid = UUID.fromString(documentId);
+            logger.info("Reanalyze request for document: {}", documentUuid);
             
             // Extract user ID from cookies or authorization header
             String userId = authUtils.extractUserIdFromRequest(request, authorization);
             if (userId == null) {
+                logger.warn("Unauthorized reanalysis request for document: {}", documentUuid);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Authentication required"));
             }
             
-            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, null); // No authToken needed for reanalysis
+            logger.info("Starting reanalysis for document: {} by user: {}", documentUuid, userId);
+            String analysisId = documentService.reanalyzeDocument(documentUuid, userId, authorization); // Pass user's auth token for reanalysis
             
+            logger.info("Reanalysis started successfully for document: {}, analysis ID: {}", documentUuid, analysisId);
             return ResponseEntity.accepted()
                 .body(Map.of(
                     "message", "Analysis started",
                     "analysis_id", analysisId
                 ));
         } catch (IllegalArgumentException e) {
+            logger.error("Bad request for reanalysis of document {}: {}", documentId, e.getMessage());
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
+            logger.error("Internal error during reanalysis of document {}: {}", documentId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to start reanalysis: " + e.getMessage()));
         }

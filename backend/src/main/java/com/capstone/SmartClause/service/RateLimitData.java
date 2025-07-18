@@ -53,6 +53,27 @@ public class RateLimitData {
     }
     
     /**
+     * Remove the most recent request from tracking.
+     * This is used for refunding rate limit consumption when a request
+     * should not count against the limit (e.g., duplicate uploads).
+     */
+    public void removeLatestRequest() {
+        if (!requestTimestamps.isEmpty()) {
+            // Remove the most recent request (last added)
+            // Since we can't remove from the tail of ConcurrentLinkedQueue efficiently,
+            // we'll convert to array, remove last, and rebuild
+            LocalDateTime[] timestamps = requestTimestamps.toArray(new LocalDateTime[0]);
+            if (timestamps.length > 0) {
+                requestTimestamps.clear();
+                // Add back all except the last one
+                for (int i = 0; i < timestamps.length - 1; i++) {
+                    requestTimestamps.offer(timestamps[i]);
+                }
+            }
+        }
+    }
+    
+    /**
      * Get the total number of recorded requests (for debugging).
      */
     public int getTotalRequestCount() {

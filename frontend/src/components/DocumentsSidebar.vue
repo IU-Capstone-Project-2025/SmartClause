@@ -149,6 +149,11 @@ export default {
       this.reanalyzingDocIds.push(doc.id);
       try {
         await api.reanalyzeDocument(doc.id);
+        
+        // Poll until analysis is complete, then navigate
+        await this.waitForAnalysisCompletion(doc.id);
+        
+        // Navigate to analysis page only when results are ready
         this.$router.push({
           name: 'Analysis',
           params: {
@@ -170,6 +175,49 @@ export default {
           this.reanalyzingDocIds.splice(index, 1);
         }
       }
+    },
+    
+    async waitForAnalysisCompletion(documentId) {
+      const maxAttempts = 120; // 10 minutes (120 * 5 seconds)
+      let attempts = 0;
+      
+      return new Promise((resolve, reject) => {
+        const poll = async () => {
+          attempts++;
+          
+          try {
+            const response = await api.getDocumentAnalysis(documentId);
+            
+            // Check if analysis is complete (document_points exists, even if empty)
+            if (response.data && response.data.document_points !== undefined) {
+              // Analysis is complete (even if no issues found)
+              resolve();
+              return;
+            }
+            
+            if (attempts >= maxAttempts) {
+              reject(new Error('Analysis timeout - took too long to complete'));
+              return;
+            }
+            
+            // Continue polling
+            setTimeout(poll, 5000); // Poll every 5 seconds
+            
+          } catch (error) {
+            // 404 or other error means analysis not ready yet
+            if (attempts >= maxAttempts) {
+              reject(error);
+              return;
+            }
+            
+            // Continue polling on error (analysis might not be ready yet)
+            setTimeout(poll, 5000);
+          }
+        };
+        
+        // Start polling
+        poll();
+      });
     }
   }
 }
