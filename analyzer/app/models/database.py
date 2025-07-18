@@ -55,11 +55,13 @@ class RuleChunk(Base):
 
 
 class AnalysisResult(Base):
-    """Model for storing analysis results"""
+    """Model for storing analysis results with caching support"""
     __tablename__ = "analysis_results"
     
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(String(255), index=True)
     user_id = Column(String(255), index=True)  # Associate analysis with user
     analysis_points = Column(JSONB)
+    content_hash = Column(String(64), index=True)  # Content hash for caching
+    expires_at = Column(TIMESTAMP, server_default=func.now())  # Cache expiry time
     created_at = Column(TIMESTAMP, server_default=func.now()) 

@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     document_id VARCHAR(255),
     user_id VARCHAR(255),
     analysis_points JSONB,
+    content_hash VARCHAR(64),
+    expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL '1 hour'),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -50,4 +52,9 @@ CREATE INDEX IF NOT EXISTS rule_chunks_chunk_number_idx ON rule_chunks (rule_id,
 -- Indexes for analysis results
 CREATE INDEX IF NOT EXISTS analysis_results_document_id_idx ON analysis_results (document_id);
 CREATE INDEX IF NOT EXISTS analysis_results_user_id_idx ON analysis_results (user_id);
-CREATE INDEX IF NOT EXISTS analysis_results_document_user_idx ON analysis_results (document_id, user_id); 
+CREATE INDEX IF NOT EXISTS analysis_results_document_user_idx ON analysis_results (document_id, user_id);
+
+-- Indexes for caching
+CREATE INDEX IF NOT EXISTS analysis_results_content_hash_expires_idx ON analysis_results (content_hash, expires_at);
+CREATE INDEX IF NOT EXISTS analysis_results_user_hash_expires_idx ON analysis_results (user_id, content_hash, expires_at);
+CREATE INDEX IF NOT EXISTS analysis_results_expires_cleanup_idx ON analysis_results (expires_at); 

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,8 +25,12 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +60,9 @@ public class DocumentService {
 
     // Directory for storing uploaded files
     private final String uploadDir = "uploads/";
+    
+    // Cache TTL in hours
+    private final int CACHE_TTL_HOURS = 1;
 
     public List<DocumentDto.DocumentListItem> getDocumentsBySpaceId(UUID spaceId) {
         logger.info("Fetching documents for space: {}", spaceId);
@@ -163,13 +171,27 @@ public class DocumentService {
         }
 
         // Read and store file content
-        document.setContent(file.getBytes());
+        byte[] fileContent = file.getBytes();
+        document.setContent(fileContent);
+        
+        // Generate content hash for caching
+        String contentHash = generateContentHash(fileContent);
+        document.setContentHash(contentHash);
         
         Document savedDocument = documentRepository.save(document);
         logger.info("Uploaded document with ID: {}", savedDocument.getId());
 
-        // Start analysis process asynchronously with authorization header
-        startDocumentAnalysis(savedDocument, authorizationHeader);
+        // Check for cached analysis before starting new analysis
+        boolean cacheHit = checkAndUseCachedAnalysis(savedDocument, userId, contentHash, authorizationHeader);
+        if (cacheHit) {
+            logger.info("CACHE HIT: Used cached analysis for document: {} (user: {}, hash: {})", 
+                savedDocument.getId(), userId, contentHash.substring(0, 8) + "...");
+        } else {
+            logger.info("CACHE MISS: Starting new analysis for document: {} (user: {}, hash: {})", 
+                savedDocument.getId(), userId, contentHash.substring(0, 8) + "...");
+            // Start analysis process asynchronously with authorization header
+            startDocumentAnalysis(savedDocument, authorizationHeader);
+        }
 
         return convertToDocumentUploadResponse(savedDocument);
     }
@@ -400,9 +422,21 @@ public class DocumentService {
 
     private void saveAnalysisResults(String analysisDocumentId, AnalysisResponse analysisResponse) {
         try {
-            // Create AnalysisResult entity
+            // Find the document to get content hash and user info
+            Optional<Document> documentOpt = documentRepository.findByAnalysisDocumentId(analysisDocumentId);
+            if (documentOpt.isEmpty()) {
+                logger.warn("Could not find document for analysis ID: {}", analysisDocumentId);
+                return;
+            }
+            
+            Document document = documentOpt.get();
+            
+            // Create AnalysisResult entity with caching information
             AnalysisResult analysisResult = new AnalysisResult();
             analysisResult.setDocumentId(analysisDocumentId);
+            analysisResult.setUserId(document.getUserId());
+            analysisResult.setContentHash(document.getContentHash());
+            analysisResult.setExpiresAt(LocalDateTime.now().plusHours(CACHE_TTL_HOURS));
             
             // Use ObjectMapper to convert AnalysisResponse to Map, preserving the exact JSON structure from analyzer
             @SuppressWarnings("unchecked")
@@ -412,7 +446,8 @@ public class DocumentService {
             
             // Save to database
             analysisResultRepository.save(analysisResult);
-            logger.info("Analysis results saved for document ID: {} with exact analyzer response structure", analysisDocumentId);
+            logger.info("Analysis results saved for document ID: {} with caching info (contentHash: {}, userId: {}, expires: {})", 
+                analysisDocumentId, document.getContentHash(), document.getUserId(), analysisResult.getExpiresAt());
             
         } catch (Exception e) {
             logger.error("Failed to save analysis results for document ID: {}", analysisDocumentId, e);
@@ -450,6 +485,129 @@ public class DocumentService {
             return "Analysis failed";
         }
         return "Pending analysis";
+    }
+    
+    // === CACHING UTILITIES ===
+    
+    /**
+     * Generate SHA-256 hash of document content for caching and duplicate detection
+     */
+    private String generateContentHash(byte[] content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(content);
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            logger.error("SHA-256 algorithm not available", e);
+            // Fallback to simpler hash
+            return String.valueOf(content.hashCode());
+        }
+    }
+    
+    /**
+     * Check for cached analysis and use it if available
+     * @param document The document being processed
+     * @param userId User ID for cache lookup
+     * @param contentHash Content hash for cache lookup
+     * @param authorizationHeader Authorization header (for logging)
+     * @return true if cached analysis was used, false if new analysis needed
+     */
+    private boolean checkAndUseCachedAnalysis(Document document, String userId, String contentHash, String authorizationHeader) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            Optional<AnalysisResult> cachedResult = analysisResultRepository.findCachedAnalysis(contentHash, userId, now);
+            
+            if (cachedResult.isPresent()) {
+                logger.info("Found cached analysis for contentHash: {} and user: {}", contentHash, userId);
+                
+                // Generate new analysis document ID for this document
+                String analysisDocumentId = UUID.randomUUID().toString();
+                document.setAnalysisDocumentId(analysisDocumentId);
+                document.setStatus(Document.DocumentStatus.COMPLETED);
+                documentRepository.save(document);
+                
+                // Create new analysis result entry based on cached data
+                AnalysisResult newAnalysisResult = new AnalysisResult();
+                newAnalysisResult.setDocumentId(analysisDocumentId);
+                newAnalysisResult.setUserId(userId);
+                newAnalysisResult.setContentHash(contentHash);
+                newAnalysisResult.setAnalysisPoints(cachedResult.get().getAnalysisPoints());
+                newAnalysisResult.setExpiresAt(now.plusHours(CACHE_TTL_HOURS));
+                
+                analysisResultRepository.save(newAnalysisResult);
+                
+                long cacheAgeMinutes = java.time.Duration.between(cachedResult.get().getCreatedAt(), now).toMinutes();
+                logger.info("CACHE REUSE: Analysis for document: {} (cache age: {} minutes, saved analysis time)", 
+                    document.getId(), cacheAgeMinutes);
+                
+                return true;
+            }
+            
+            logger.debug("CACHE MISS: No cached analysis found for contentHash: {} and user: {}", 
+                contentHash.substring(0, 8) + "...", userId);
+            return false;
+            
+        } catch (Exception e) {
+            logger.error("Error checking cached analysis for document: " + document.getId(), e);
+            // On error, proceed with normal analysis
+            return false;
+                 }
+     }
+     
+         /**
+      * Scheduled task to clean up expired cache entries
+      * Runs every hour to remove expired analysis results
+      */
+    @Scheduled(fixedRate = 3600000) // Run every hour (3600000 ms)
+    public void cleanupExpiredCacheEntries() {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            int deletedCount = analysisResultRepository.deleteExpiredCacheEntries(now);
+            
+            if (deletedCount > 0) {
+                logger.info("Cache cleanup: Removed {} expired analysis results", deletedCount);
+            } else {
+                logger.debug("Cache cleanup: No expired entries found");
+            }
+            
+            // Log cache statistics
+            long activeCacheEntries = analysisResultRepository.countActiveCacheEntries(now);
+            logger.debug("Cache statistics: {} active cache entries", activeCacheEntries);
+            
+        } catch (Exception e) {
+            logger.error("Failed to cleanup expired cache entries", e);
+        }
+    }
+    
+    /**
+     * Get cache statistics for monitoring
+     * @param userId Optional user ID to get user-specific stats
+     * @return Map containing cache statistics
+     */
+    public Map<String, Object> getCacheStatistics(String userId) {
+        Map<String, Object> stats = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+        
+        try {
+            long totalActiveCacheEntries = analysisResultRepository.countActiveCacheEntries(now);
+            stats.put("total_active_cache_entries", totalActiveCacheEntries);
+            stats.put("cache_ttl_hours", CACHE_TTL_HOURS);
+            stats.put("timestamp", now.toString());
+            
+            if (userId != null) {
+                long userCacheEntries = analysisResultRepository.countActiveCacheEntriesForUser(userId, now);
+                stats.put("user_cache_entries", userCacheEntries);
+                stats.put("user_id", userId);
+            }
+            
+            logger.debug("Cache statistics generated: {}", stats);
+            
+        } catch (Exception e) {
+            logger.error("Failed to generate cache statistics", e);
+            stats.put("error", "Failed to retrieve cache statistics");
+        }
+        
+        return stats;
     }
 
     // Custom MultipartFile implementation for internal use
