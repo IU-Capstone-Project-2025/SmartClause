@@ -18,7 +18,7 @@
     </div>
 
     <div class="results-list">
-      <div v-for="(result, index) in results" :key="index" class="result-item">
+      <div v-for="(result, index) in filteredResults" :key="index" class="result-item">
         <div class="result-item-header" @click="toggleResult(index)">
           <div class="result-title">
             <span>{{ result.point_number }}: {{ activeIndex === index ? result.point_content : truncate(result.point_content, 100) }}</span>
@@ -51,8 +51,17 @@ export default {
       activeIndex: null,
       fileName: '',
       results: [],
-      totalIssues: 0,
     };
+  },
+  computed: {
+    filteredResults() {
+      return this.results.filter(result => result.analysis_points && result.analysis_points.length > 0);
+    },
+    totalIssues() {
+      return this.filteredResults.reduce((total, result) => {
+        return total + (result.analysis_points ? result.analysis_points.length : 0);
+      }, 0);
+    }
   },
   created() {
     this.fileName = this.$route.query.fileName || 'Unknown file';
@@ -61,9 +70,6 @@ export default {
       const apiResponse = JSON.parse(resultsData);
       if (apiResponse.document_points) {
         this.results = apiResponse.document_points;
-        this.totalIssues = this.results.reduce((total, result) => {
-            return total + (result.analysis_points ? result.analysis_points.length : 0);
-        }, 0);
       }
     } else {
       this.$router.push('/');
