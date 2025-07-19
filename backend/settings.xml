@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 
+          https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <!-- Mirrors for Maven Central to avoid rate limits -->
+  <mirrors>
+    <!-- Aliyun Maven Central Mirror -->
+    <mirror>
+      <id>aliyun-central</id>
+      <name>Aliyun Maven Central</name>
+      <url>https://maven.aliyun.com/repository/central</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+    
+    <!-- UK Maven Central Mirror -->
+    <mirror>
+      <id>uk-central</id>
+      <name>UK Maven Central</name>
+      <url>https://uk.maven.org/maven2</url>
+      <mirrorOf>!aliyun-central,central</mirrorOf>
+    </mirror>
+  </mirrors>
+
+  <!-- Profiles for rate limiting and performance -->
+  <profiles>
+    <profile>
+      <id>default</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <properties>
+        <!-- Disable parallel downloads to reduce rate limit hits -->
+        <aether.connector.basic.parallelPut>false</aether.connector.basic.parallelPut>
+        <maven.resolver.transport>wagon</maven.resolver.transport>
+        <!-- Increase timeouts -->
+        <maven.wagon.rto>300000</maven.wagon.rto>
+        <maven.wagon.http.retryHandler.count>3</maven.wagon.http.retryHandler.count>
+        <!-- Reduce concurrent connections -->
+        <maven.resolver.transport.http.connectTimeout>30000</maven.resolver.transport.http.connectTimeout>
+        <maven.resolver.transport.http.readTimeout>300000</maven.resolver.transport.http.readTimeout>
+      </properties>
+      
+      <!-- Additional repositories as fallbacks -->
+      <repositories>
+        <repository>
+          <id>spring-milestones</id>
+          <name>Spring Milestones</name>
+          <url>https://repo.spring.io/milestone</url>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+        <repository>
+          <id>spring-releases</id>
+          <name>Spring Releases</name>
+          <url>https://repo.spring.io/release</url>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+      
+      <pluginRepositories>
+        <pluginRepository>
+          <id>spring-milestones</id>
+          <name>Spring Milestones</name>
+          <url>https://repo.spring.io/milestone</url>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>default</activeProfile>
+  </activeProfiles>
+
+</settings> 
