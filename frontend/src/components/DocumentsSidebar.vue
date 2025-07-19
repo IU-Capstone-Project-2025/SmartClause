@@ -312,7 +312,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.2s ease-in-out;
 }
 
 .documents-list li:hover {
@@ -381,8 +381,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.3s;
-  opacity: 0.6;
+  transition: opacity 0.2s ease-in-out;
+  opacity: 0.7;
 }
 
 .spinner {

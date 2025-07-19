@@ -237,15 +237,7 @@ export default {
                 // Get the document ID for tracking
                 const documentId = result.data.id;
                 
-                // Remove uploading file and add to processing tracking
-                if (this.uploadingFiles[spaceId]) {
-                    this.uploadingFiles = {
-                      ...this.uploadingFiles,
-                      [spaceId]: this.uploadingFiles[spaceId].filter(f => f.id !== uploadingFile.id)
-                    };
-                }
-                
-                // Add to processing documents
+                // Add to processing documents before refreshing
                 if (documentId && !this.processingDocumentIds.includes(documentId)) {
                     this.processingDocumentIds.push(documentId);
                 }
@@ -253,6 +245,25 @@ export default {
                 // Refresh documents list to show the new document
                 if (this.selectedSpaceId === spaceId) {
                     await this.refreshDocuments(spaceId);
+                    
+                    // Only remove uploading file if real document actually appears
+                    const realDocumentExists = this.documents.some(doc => doc.id === documentId);
+                    if (realDocumentExists && this.uploadingFiles[spaceId]) {
+                        this.uploadingFiles = {
+                          ...this.uploadingFiles,
+                          [spaceId]: this.uploadingFiles[spaceId].filter(f => f.id !== uploadingFile.id)
+                        };
+                    } else if (!realDocumentExists) {
+                        // Fallback: remove uploading file after 2 seconds if real document doesn't appear
+                        setTimeout(() => {
+                            if (this.uploadingFiles[spaceId]) {
+                                this.uploadingFiles = {
+                                  ...this.uploadingFiles,
+                                  [spaceId]: this.uploadingFiles[spaceId].filter(f => f.id !== uploadingFile.id)
+                                };
+                            }
+                        }, 2000);
+                    }
                     
                     // Wait for analysis completion
                     if (documentId) {
@@ -276,7 +287,7 @@ export default {
               this.$refs.documentsSidebar.uploadError = message;
             }
         } finally {
-            // Remove from uploading files list (in case of error)
+            // Remove from uploading files list (in case of error or duplicate)
             if (this.uploadingFiles[spaceId]) {
                 this.uploadingFiles = {
                   ...this.uploadingFiles,
