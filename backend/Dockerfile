@@ -4,13 +4,15 @@ WORKDIR /app
 
 RUN yum install -y curl && yum clean all
 
+COPY settings.xml /root/.m2/settings.xml
+
 COPY pom.xml .
 
-RUN mvn dependency:go-offline -B
+RUN mvn dependency:go-offline -B --settings /root/.m2/settings.xml
 
 COPY src src
 
-RUN mvn package -DskipTests
+RUN mvn package -DskipTests --settings /root/.m2/settings.xml
 
 FROM amazoncorretto:21-alpine
 

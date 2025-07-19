@@ -4,58 +4,95 @@
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 
           https://maven.apache.org/xsd/settings-1.0.0.xsd">
 
-  <!-- Mirrors for Maven Central to avoid rate limits -->
   <mirrors>
-    <!-- Aliyun Maven Central Mirror -->
+    <!-- Основное зеркало - Aliyun (хорошо работает в России) -->
     <mirror>
       <id>aliyun-central</id>
-      <name>Aliyun Maven Central</name>
+      <name>Aliyun Maven Central Mirror</name>
       <url>https://maven.aliyun.com/repository/central</url>
       <mirrorOf>central</mirrorOf>
     </mirror>
     
-    <!-- UK Maven Central Mirror -->
+    <!-- Fallback #1 - Huawei Cloud (альтернатива для Китая/России) -->
     <mirror>
-      <id>uk-central</id>
-      <name>UK Maven Central</name>
-      <url>https://uk.maven.org/maven2</url>
-      <mirrorOf>!aliyun-central,central</mirrorOf>
+      <id>huaweicloud-central</id>
+      <name>Huawei Cloud Maven Central</name>
+      <url>https://repo.huaweicloud.com/repository/maven</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+    
+    <!-- Fallback #2 - Tencent Cloud -->
+    <mirror>
+      <id>tencent-central</id>
+      <name>Tencent Cloud Maven Central</name>
+      <url>https://mirrors.tencent.com/nexus/repository/maven-public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+    
+    <!-- Fallback #3 - Spring репозиторий (для Spring зависимостей) -->
+    <mirror>
+      <id>spring-milestone</id>
+      <name>Spring Milestone Repository</name>
+      <url>https://repo.spring.io/milestone</url>
+      <mirrorOf>spring-milestones</mirrorOf>
     </mirror>
   </mirrors>
 
-  <!-- Profiles for rate limiting and performance -->
+  <!-- Дополнительные репозитории для fallback -->
   <profiles>
     <profile>
-      <id>default</id>
+      <id>fallback-repos</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
-      <properties>
-        <!-- Disable parallel downloads to reduce rate limit hits -->
-        <aether.connector.basic.parallelPut>false</aether.connector.basic.parallelPut>
-        <maven.resolver.transport>wagon</maven.resolver.transport>
-        <!-- Increase timeouts -->
-        <maven.wagon.rto>300000</maven.wagon.rto>
-        <maven.wagon.http.retryHandler.count>3</maven.wagon.http.retryHandler.count>
-        <!-- Reduce concurrent connections -->
-        <maven.resolver.transport.http.connectTimeout>30000</maven.resolver.transport.http.connectTimeout>
-        <maven.resolver.transport.http.readTimeout>300000</maven.resolver.transport.http.readTimeout>
-      </properties>
       
-      <!-- Additional repositories as fallbacks -->
       <repositories>
+        <!-- Spring репозитории как fallback -->
         <repository>
-          <id>spring-milestones</id>
-          <name>Spring Milestones</name>
-          <url>https://repo.spring.io/milestone</url>
+          <id>spring-releases</id>
+          <name>Spring Releases Repository</name>
+          <url>https://repo.spring.io/release</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
           <snapshots>
             <enabled>false</enabled>
           </snapshots>
         </repository>
+        
         <repository>
-          <id>spring-releases</id>
-          <name>Spring Releases</name>
-          <url>https://repo.spring.io/release</url>
+          <id>spring-milestones</id>
+          <name>Spring Milestones Repository</name>
+          <url>https://repo.spring.io/milestone</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+        
+        <!-- Maven Central как последний fallback -->
+        <repository>
+          <id>central-fallback</id>
+          <name>Maven Central Fallback</name>
+          <url>https://repo1.maven.org/maven2</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+        
+        <!-- JCenter как дополнительный fallback -->
+        <repository>
+          <id>jcenter</id>
+          <name>JCenter Repository</name>
+          <url>https://jcenter.bintray.com</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
           <snapshots>
             <enabled>false</enabled>
           </snapshots>
@@ -64,19 +101,69 @@
       
       <pluginRepositories>
         <pluginRepository>
-          <id>spring-milestones</id>
-          <name>Spring Milestones</name>
-          <url>https://repo.spring.io/milestone</url>
+          <id>spring-releases-plugins</id>
+          <name>Spring Releases Plugin Repository</name>
+          <url>https://repo.spring.io/release</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </pluginRepository>
+        
+        <pluginRepository>
+          <id>central-plugins-fallback</id>
+          <name>Maven Central Plugins Fallback</name>
+          <url>https://repo1.maven.org/maven2</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
           <snapshots>
             <enabled>false</enabled>
           </snapshots>
         </pluginRepository>
       </pluginRepositories>
+      
+      <properties>
+        <!-- Отключаем параллельные загрузки для избежания rate limiting -->
+        <aether.connector.basic.parallelPut>false</aether.connector.basic.parallelPut>
+        
+        <!-- Используем wagon transport для лучшей совместимости -->
+        <maven.resolver.transport>wagon</maven.resolver.transport>
+        
+        <!-- Увеличиваем timeout'ы -->
+        <maven.wagon.rto>300000</maven.wagon.rto>
+        <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
+        <maven.wagon.http.retryHandler.requestSentEnabled>true</maven.wagon.http.retryHandler.requestSentEnabled>
+        
+        <!-- Настройки для HTTP соединений -->
+        <maven.resolver.transport.http.connectTimeout>60000</maven.resolver.transport.http.connectTimeout>
+        <maven.resolver.transport.http.readTimeout>300000</maven.resolver.transport.http.readTimeout>
+        
+        <!-- Увеличиваем количество попыток -->
+        <maven.resolver.transport.http.retryHandler.count>5</maven.resolver.transport.http.retryHandler.count>
+        
+        <!-- Отключаем checksums для ускорения (опционально) -->
+        <!-- <maven.resolver.checksums>false</maven.resolver.checksums> -->
+      </properties>
     </profile>
   </profiles>
 
   <activeProfiles>
-    <activeProfile>default</activeProfile>
+    <activeProfile>fallback-repos</activeProfile>
   </activeProfiles>
 
-</settings> 
+  <!-- Серверы для аутентификации (если нужно) -->
+  <servers>
+    <!-- Пример настройки сервера с аутентификацией -->
+    <!--
+    <server>
+      <id>private-repo</id>
+      <username>your-username</username>
+      <password>your-password</password>
+    </server>
+    -->
+  </servers>
+
+</settings>
