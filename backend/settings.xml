@@ -71,33 +71,6 @@
             <enabled>false</enabled>
           </snapshots>
         </repository>
-        
-        <!-- Maven Central как последний fallback -->
-        <repository>
-          <id>central-fallback</id>
-          <name>Maven Central Fallback</name>
-          <url>https://repo1.maven.org/maven2</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-        
-        <!-- JCenter как дополнительный fallback -->
-        <repository>
-          <id>jcenter</id>
-          <name>JCenter Repository</name>
-          <url>https://jcenter.bintray.com</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
       
       <pluginRepositories>
         <pluginRepository>
@@ -133,16 +106,16 @@
         <maven.resolver.transport>wagon</maven.resolver.transport>
         
         <!-- Увеличиваем timeout'ы -->
-        <maven.wagon.rto>300000</maven.wagon.rto>
+        <maven.wagon.rto>1000</maven.wagon.rto>
         <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
         <maven.wagon.http.retryHandler.requestSentEnabled>true</maven.wagon.http.retryHandler.requestSentEnabled>
         
         <!-- Настройки для HTTP соединений -->
-        <maven.resolver.transport.http.connectTimeout>60000</maven.resolver.transport.http.connectTimeout>
-        <maven.resolver.transport.http.readTimeout>300000</maven.resolver.transport.http.readTimeout>
+        <maven.resolver.transport.http.connectTimeout>2000</maven.resolver.transport.http.connectTimeout>
+        <maven.resolver.transport.http.readTimeout>1000</maven.resolver.transport.http.readTimeout>
         
         <!-- Увеличиваем количество попыток -->
-        <maven.resolver.transport.http.retryHandler.count>5</maven.resolver.transport.http.retryHandler.count>
+        <maven.resolver.transport.http.retryHandler.count>3</maven.resolver.transport.http.retryHandler.count>
         
         <!-- Отключаем checksums для ускорения (опционально) -->
         <!-- <maven.resolver.checksums>false</maven.resolver.checksums> -->
