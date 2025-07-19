@@ -32,10 +32,12 @@
       :space-id="selectedSpaceId"
       :documents="documents"
       :uploading-files="uploadingFiles[selectedSpaceId] || []"
+      :processing-document-ids="processingDocumentIds"
       :is-collapsed="isDocumentsSidebarCollapsed"
       @upload-files="handleFileUpload"
       @toggle-collapse="toggleDocumentsSidebar"
       @delete-document="handleDeleteDocument"
+      @reanalyze-document="handleDocumentReanalyze"
     />
     
     <DuplicateDocumentModal
@@ -73,6 +75,7 @@ export default {
       documents: [],
       uploadingFiles: {},
       duplicateModalData: null,
+      processingDocumentIds: [], // Track documents being processed
     };
   },
   computed: {
@@ -231,9 +234,39 @@ export default {
                     uploadingFile: uploadingFile
                 };
             } else if (result.success) {
-                // Successful upload - refresh documents list
+                // Get the document ID for tracking
+                const documentId = result.data.id;
+                
+                // Remove uploading file and add to processing tracking
+                if (this.uploadingFiles[spaceId]) {
+                    this.uploadingFiles = {
+                      ...this.uploadingFiles,
+                      [spaceId]: this.uploadingFiles[spaceId].filter(f => f.id !== uploadingFile.id)
+                    };
+                }
+                
+                // Add to processing documents
+                if (documentId && !this.processingDocumentIds.includes(documentId)) {
+                    this.processingDocumentIds.push(documentId);
+                }
+                
+                // Refresh documents list to show the new document
                 if (this.selectedSpaceId === spaceId) {
                     await this.refreshDocuments(spaceId);
+                    
+                    // Wait for analysis completion
+                    if (documentId) {
+                        try {
+                            await this.waitForAnalysisCompletion(documentId);
+                            // Refresh documents again after analysis completion
+                            await this.refreshDocuments(spaceId);
+                        } catch (error) {
+                            console.error('Analysis completion polling failed:', error);
+                        } finally {
+                            // Remove from processing list
+                            this.processingDocumentIds = this.processingDocumentIds.filter(id => id !== documentId);
+                        }
+                    }
                 }
             }
         } catch (error) {
@@ -243,7 +276,7 @@ export default {
               this.$refs.documentsSidebar.uploadError = message;
             }
         } finally {
-            // Remove from uploading files list
+            // Remove from uploading files list (in case of error)
             if (this.uploadingFiles[spaceId]) {
                 this.uploadingFiles = {
                   ...this.uploadingFiles,
@@ -275,9 +308,9 @@ export default {
         // Close modal immediately
         this.closeDuplicateModal();
         
-        // Add document to reanalyzing state if documents sidebar exists
-        if (this.$refs.documentsSidebar) {
-            this.$refs.documentsSidebar.reanalyzingDocIds.push(existingDocumentId);
+        // Add to processing documents instead of using DocumentsSidebar's reanalyzingDocIds
+        if (!this.processingDocumentIds.includes(existingDocumentId)) {
+            this.processingDocumentIds.push(existingDocumentId);
         }
         
         try {
@@ -293,26 +326,16 @@ export default {
                     spaceId: spaceId,
                     documentId: existingDocumentId
                 }
-            }).then(() => {
-                // Remove from reanalyzing list when navigation is complete
-                if (this.$refs.documentsSidebar) {
-                    const index = this.$refs.documentsSidebar.reanalyzingDocIds.indexOf(existingDocumentId);
-                    if (index > -1) {
-                        this.$refs.documentsSidebar.reanalyzingDocIds.splice(index, 1);
-                    }
-                }
             });
         } catch (error) {
             console.error('Error reanalyzing document:', error);
             if (this.$refs.documentsSidebar) {
                 const message = error.response?.data?.error || this.$t('documentsSidebar.reanalysisError');
                 this.$refs.documentsSidebar.uploadError = message;
-                // Remove from reanalyzing list on error
-                const index = this.$refs.documentsSidebar.reanalyzingDocIds.indexOf(existingDocumentId);
-                if (index > -1) {
-                    this.$refs.documentsSidebar.reanalyzingDocIds.splice(index, 1);
-                }
             }
+        } finally {
+            // Remove from processing list
+            this.processingDocumentIds = this.processingDocumentIds.filter(id => id !== existingDocumentId);
         }
     },
     
@@ -383,6 +406,31 @@ export default {
               this.$router.push('/login');
             }
         }
+    },
+    async handleDocumentReanalyze(documentId) {
+      // Add to processing documents
+      if (!this.processingDocumentIds.includes(documentId)) {
+        this.processingDocumentIds.push(documentId);
+      }
+      
+      try {
+        await api.reanalyzeDocument(documentId);
+        // Wait for analysis completion
+        await this.waitForAnalysisCompletion(documentId);
+        // Refresh documents to show the updated analysis
+        if (this.selectedSpaceId) {
+          await this.refreshDocuments(this.selectedSpaceId);
+        }
+      } catch (error) {
+        console.error('Error reanalyzing document:', error);
+        if (this.$refs.documentsSidebar) {
+          const message = error.response?.data?.error || this.$t('documentsSidebar.reanalysisError');
+          this.$refs.documentsSidebar.uploadError = message;
+        }
+      } finally {
+        // Remove from processing list
+        this.processingDocumentIds = this.processingDocumentIds.filter(id => id !== documentId);
+      }
     }
   },
   created() {
