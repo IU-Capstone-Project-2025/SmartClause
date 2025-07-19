@@ -74,41 +74,23 @@
       </repositories>
       
       <pluginRepositories>
-        <pluginRepository>
-          <id>spring-releases-plugins</id>
-          <name>Spring Releases Plugin Repository</name>
-          <url>https://repo.spring.io/release</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </pluginRepository>
-        
-        <pluginRepository>
-          <id>central-plugins-fallback</id>
-          <name>Maven Central Plugins Fallback</name>
-          <url>https://repo1.maven.org/maven2</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </pluginRepository>
+        <!-- Используем только основное зеркало для плагинов -->
       </pluginRepositories>
       
-      <properties>
-        <!-- Используем wagon transport для лучшей совместимости -->
-        <maven.resolver.transport>wagon</maven.resolver.transport>
-        
-        <!-- Увеличиваем timeout'ы -->
-        <maven.wagon.rto>1000</maven.wagon.rto>
-        <maven.wagon.http.retryHandler.count>3</maven.wagon.http.retryHandler.count>
-        <maven.wagon.http.retryHandler.requestSentEnabled>true</maven.wagon.http.retryHandler.requestSentEnabled>
-        <maven.resolver.transport.http.retryHandler.count>3</maven.resolver.transport.http.retryHandler.count>
-      </properties>
+              <properties>
+          <!-- Используем wagon transport для лучшей совместимости -->
+          <maven.resolver.transport>wagon</maven.resolver.transport>
+          
+          <!-- Уменьшаем timeout'ы для быстрого fallback -->
+          <maven.wagon.rto>5000</maven.wagon.rto>
+          <maven.wagon.http.retryHandler.count>1</maven.wagon.http.retryHandler.count>
+          <maven.wagon.http.retryHandler.requestSentEnabled>true</maven.wagon.http.retryHandler.requestSentEnabled>
+          
+          <!-- Настройки для HTTP соединений -->
+          <maven.resolver.transport.http.connectTimeout>5000</maven.resolver.transport.http.connectTimeout>
+          <maven.resolver.transport.http.readTimeout>5000</maven.resolver.transport.http.readTimeout>
+          <maven.resolver.transport.http.retryHandler.count>1</maven.resolver.transport.http.retryHandler.count>
+        </properties>
     </profile>
   </profiles>
 
