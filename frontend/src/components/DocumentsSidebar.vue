@@ -33,12 +33,16 @@
         <li v-for="doc in documents" :key="doc.id">
           <span class="doc-name" :title="doc.name">{{ doc.name }}</span>
           <div class="doc-actions">
-            <div v-if="reanalyzingDocIds.includes(doc.id)" class="spinner"></div>
+            <div v-if="processingDocumentIds.includes(doc.id)" class="spinner"></div>
             <template v-else>
               <button @click.stop="promptReanalyze(doc)" class="action-btn reanalyze-btn" :title="$t('documentsSidebar.reanalyzeDocument')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18a6 6 0 0 0 6-6 6-6 0 0 0-6-6 6 6 0 0 0-6 6 6 6 0 0 0 6 6z"></path><path d="M12 12 8 8"></path></svg>
               </button>
-              <button @click.stop="promptAnalyze(doc)" class="action-btn analyze-btn" :title="$t('documentsSidebar.seeAnalysis')">
+              <button 
+                @click.stop="promptAnalyze(doc)" 
+                class="action-btn analyze-btn" 
+                :disabled="doc.status === 'processing' || doc.status === 'uploading'"
+                :title="$t('documentsSidebar.seeAnalysis')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
               </button>
               <button @click.stop="promptDelete(doc)" class="action-btn delete-btn" :title="$t('documentsSidebar.deleteDocument')">
@@ -74,6 +78,10 @@ export default {
       type: Array,
       default: () => [],
     },
+    processingDocumentIds: {
+      type: Array,
+      default: () => [],
+    },
     isCollapsed: {
       type: Boolean,
       default: false,
@@ -84,7 +92,6 @@ export default {
       isDeleteModalOpen: false,
       docToDelete: null,
       uploadError: null,
-      reanalyzingDocIds: [],
     };
   },
   methods: {
@@ -142,39 +149,9 @@ export default {
         }
       });
     },
-    async promptReanalyze(doc) {
-      if (this.reanalyzingDocIds.includes(doc.id)) return;
-      this.uploadError = null;
-
-      this.reanalyzingDocIds.push(doc.id);
-      try {
-        await api.reanalyzeDocument(doc.id);
-        
-        // Poll until analysis is complete, then navigate
-        await this.waitForAnalysisCompletion(doc.id);
-        
-        // Navigate to analysis page only when results are ready
-        this.$router.push({
-          name: 'Analysis',
-          params: {
-            spaceId: this.spaceId,
-            documentId: doc.id
-          }
-        }).then(() => {
-          // Remove from reanalyzing list when navigation is complete
-          const index = this.reanalyzingDocIds.indexOf(doc.id);
-          if (index > -1) {
-            this.reanalyzingDocIds.splice(index, 1);
-          }
-        });
-      } catch (error) {
-        console.error('Error triggering re-analysis:', error);
-        this.uploadError = error.response?.data?.error || this.$t('documentsSidebar.reanalysisError');
-        const index = this.reanalyzingDocIds.indexOf(doc.id);
-        if (index > -1) {
-          this.reanalyzingDocIds.splice(index, 1);
-        }
-      }
+    promptReanalyze(doc) {
+      if (this.processingDocumentIds.includes(doc.id)) return;
+      this.$emit('reanalyze-document', doc.id);
     },
     
     async waitForAnalysisCompletion(documentId) {
@@ -335,7 +312,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.2s ease-in-out;
 }
 
 .documents-list li:hover {
@@ -381,6 +358,16 @@ export default {
   color: #ffffff;
 }
 
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn:disabled:hover {
+  background-color: transparent;
+  color: #a0aec0;
+}
+
 .reanalyze-btn:hover {
   background-color: #dd6b20;
 }
@@ -394,8 +381,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.3s;
-  opacity: 0.6;
+  transition: opacity 0.2s ease-in-out;
+  opacity: 0.7;
 }
 
 .spinner {
