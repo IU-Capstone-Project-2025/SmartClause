@@ -100,26 +100,14 @@
       </pluginRepositories>
       
       <properties>
-        <!-- Отключаем параллельные загрузки для избежания rate limiting -->
-        <aether.connector.basic.parallelPut>false</aether.connector.basic.parallelPut>
-        
         <!-- Используем wagon transport для лучшей совместимости -->
         <maven.resolver.transport>wagon</maven.resolver.transport>
         
         <!-- Увеличиваем timeout'ы -->
         <maven.wagon.rto>1000</maven.wagon.rto>
-        <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
+        <maven.wagon.http.retryHandler.count>3</maven.wagon.http.retryHandler.count>
         <maven.wagon.http.retryHandler.requestSentEnabled>true</maven.wagon.http.retryHandler.requestSentEnabled>
-        
-        <!-- Настройки для HTTP соединений -->
-        <maven.resolver.transport.http.connectTimeout>2000</maven.resolver.transport.http.connectTimeout>
-        <maven.resolver.transport.http.readTimeout>1000</maven.resolver.transport.http.readTimeout>
-        
-        <!-- Увеличиваем количество попыток -->
         <maven.resolver.transport.http.retryHandler.count>3</maven.resolver.transport.http.retryHandler.count>
-        
-        <!-- Отключаем checksums для ускорения (опционально) -->
-        <!-- <maven.resolver.checksums>false</maven.resolver.checksums> -->
       </properties>
     </profile>
   </profiles>
